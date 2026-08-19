@@ -1,0 +1,253 @@
+{
+  "meta": {
+    "schemaVersion": "1.0",
+    "title": "Claude + Plugin: từ công cụ tự vận hành đến nền tảng mở rộng",
+    "subtitle": "Thuyết trình kỹ thuật nội bộ",
+    "presenter": "",
+    "duration": "~70 phút + Q&A 5–10 phút",
+    "language": "vi",
+    "audience": "đồng nghiệp + sếp",
+    "updated": "2026-08-18"
+  },
+  "cover": {
+    "title": "Claude + Plugin",
+    "subtitle": "từ công cụ tự vận hành đến nền tảng mở rộng"
+  },
+  "sections": [
+    {
+      "id": "mo-bai",
+      "title": "Mở bài — Luận điểm",
+      "duration": "5 phút",
+      "slides": [
+        {
+          "id": "mo-bai-1",
+          "layout": "statement",
+          "title": "Luận điểm cốt lõi",
+          "body": [
+            "Claude Code vốn đã là công cụ tự vận hành — không phải chatbot.",
+            "Plugin là cách mở rộng nó, lấp các khoảng trống mà bản nguyên bản chưa có."
+          ]
+        },
+        {
+          "id": "mo-bai-2",
+          "layout": "statement",
+          "title": "Điều cần nhớ",
+          "body": [
+            "Đừng chỉ dùng Claude như một chatbot — hãy mở rộng nó bằng plugin để nó tự vận hành trọn gói."
+          ]
+        },
+        {
+          "id": "mo-bai-3",
+          "layout": "bullets",
+          "title": "Mạch của buổi nói",
+          "bullets": [
+            "Khái niệm & phân loại — hạn chế của bản nguyên bản, rồi \"plugin\" là gì",
+            "Cơ chế vận hành — 4 cơ chế bên trong plugin",
+            "Minh họa thực tế — 4 plugin demo, mỗi plugin lấp một giới hạn"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "khai-niem-phan-loai",
+      "title": "Khái niệm & phân loại",
+      "duration": "20 phút",
+      "slides": [
+        {
+          "id": "kpl-1",
+          "layout": "bullets",
+          "title": "Claude Code: không phải chatbot",
+          "bullets": [
+            "Claude Code nguyên bản (chưa cài plugin) đã tự: đọc/sửa file, chạy lệnh, tìm code, thao tác git.",
+            "Không phải chatbot copy-paste — nó đã là công cụ tự vận hành.",
+            "Nhưng tự nó vẫn còn 4 giới hạn — chưa bàn đến cách lấp."
+          ]
+        },
+        {
+          "id": "kpl-2",
+          "layout": "table",
+          "title": "4 giới hạn của Claude nguyên bản",
+          "table": {
+            "headers": ["#", "Giới hạn", "Nghĩa là"],
+            "rows": [
+              ["1", "Biết làm, nhưng chưa có phương pháp chuẩn", "Viết được (ví dụ frontend) nhưng không theo quy trình chuyên biệt nhất quán — chất lượng phụ thuộc cách đặt vấn đề từng lần"],
+              ["2", "Chỉ suy luận, không quan sát / hành động thực tế", "Đọc code, viết code, dự đoán lỗi — nhưng không thực sự nhìn và thao tác hệ thống bên ngoài (trình duyệt, database, API)"],
+              ["3", "Chỉ làm khi được gọi", "Mỗi bước review / test / commit phải do con người chủ động yêu cầu — không tự kích hoạt theo sự kiện"],
+              ["4", "Khó tổng hợp \"đã làm gì\"", "Việc lớn qua nhiều đầu việc — sau đó khó biết đã làm gì, đổi file nào, còn gì chưa xong"]
+            ]
+          }
+        },
+        {
+          "id": "kpl-3",
+          "layout": "statement",
+          "title": "Kết luận",
+          "body": [
+            "Claude nguyên bản mạnh ở suy nghĩ và viết code; còn trống ở 4 chỗ: phương pháp chuẩn, quan sát thực tế, tự kích hoạt, tổng hợp kết quả."
+          ]
+        },
+        {
+          "id": "kpl-4",
+          "layout": "bullets",
+          "title": "Plugin là gì",
+          "bullets": [
+            "Để lấp các khoảng trống trên, Claude được \"mở rộng\" — ta gọi chung là plugin.",
+            "\"Plugin\" hiểu theo nghĩa rộng: cơ chế mở rộng khả năng làm việc của Claude — bên trong có thể là một thành phần đơn lẻ, hoặc nhiều thành phần kết hợp.",
+            "Mỗi plugin nhắm một kiểu khoảng trống: phương pháp, hành động, tự kích hoạt, hoặc tổng hợp."
+          ]
+        },
+        {
+          "id": "kpl-5",
+          "layout": "statement",
+          "title": "Kết luận",
+          "body": [
+            "Plugin mở rộng Claude theo hai kiểu: lấp khoảng trống \"chưa làm được\", và chuẩn hóa chỗ \"làm được nhưng chưa nhất quán\"."
+          ]
+        },
+        {
+          "id": "kpl-6",
+          "layout": "table",
+          "title": "Hệ sinh thái plugin — 3 loại",
+          "table": {
+            "headers": ["Loại", "Là gì", "Ví dụ", "Dùng khi nào"],
+            "rows": [
+              ["Chính thức", "Anthropic phát triển, tích hợp sẵn trong Claude Code", "Extension Claude Code trên VS Code", "Công việc hằng ngày"],
+              ["Mã nguồn mở", "Cộng đồng viết, kết nối công cụ bên ngoài", "Playwright, Cline, Roo Code, Continue", "Cần công cụ đặc thù"],
+              ["Tự build (nội bộ)", "Đội ngũ tự đóng gói quy trình riêng", "Skill /review-pr, hook chạy test", "Chuẩn hóa quy trình team"]
+            ]
+          }
+        },
+        {
+          "id": "kpl-7",
+          "layout": "statement",
+          "title": "Điểm nhấn với ban quản lý",
+          "body": [
+            "Hệ sinh thái có sẵn, không tự xây từ đầu — chi phí áp dụng thấp hơn nhiều người nghĩ."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "co-che-hoat-dong",
+      "title": "Cơ chế hoạt động",
+      "duration": "20 phút",
+      "slides": [
+        {
+          "id": "cchd-1",
+          "layout": "bullets",
+          "title": "Skills — làm thế nào?",
+          "bullets": [
+            "Trả lời \"làm việc này theo cách nào\": đóng gói một phương pháp/quy trình để Claude thực hiện nhất quán.",
+            "Ví dụ: skill thiết kế giao diện quy định trình tự — mục đích → cấu trúc thông tin → bố cục → màu → chữ → component → kiểm tra responsive.",
+            "Biến \"biết làm\" thành \"làm theo phương pháp chuẩn\"."
+          ]
+        },
+        {
+          "id": "cchd-2",
+          "layout": "bullets",
+          "title": "MCP server — có thể làm gì?",
+          "bullets": [
+            "Trả lời \"Claude có thể thao tác gì với công cụ ngoài\": chuẩn mở (Model Context Protocol) kết nối database, trình duyệt, API, filesystem.",
+            "Ví dụ: MCP server điều khiển trình duyệt thật — mở trang, click, nhập liệu, chụp ảnh.",
+            "Từ \"suy luận, dự đoán\" sang \"quan sát, hành động thực tế\"."
+          ]
+        },
+        {
+          "id": "cchd-3",
+          "layout": "bullets",
+          "title": "Hooks — khi nào tự động làm?",
+          "bullets": [
+            "Trả lời \"khi nào tự chạy\": lệnh tự động kích hoạt khi một sự kiện xảy ra (trước/sau hành động).",
+            "Ví dụ: khi chuẩn bị commit, hook tự chạy quy trình review + test.",
+            "Biến từng bước thủ công thành quy trình tự động."
+          ]
+        },
+        {
+          "id": "cchd-4",
+          "layout": "bullets",
+          "title": "Sub-agent — ai làm phần nào?",
+          "bullets": [
+            "Trả lời \"ai làm phần nào\" và \"cuối cùng đã làm gì\": chia việc lớn cho các agent con, chạy song song rồi tổng hợp.",
+            "Ví dụ: 1 agent phân tích code, 1 agent kiểm tra frontend, 1 agent chạy test — gom thành báo cáo.",
+            "Giải quyết việc lớn + tổng hợp kết quả cuối phiên."
+          ]
+        },
+        {
+          "id": "cchd-5",
+          "layout": "bullets",
+          "title": "Giới hạn & rủi ro",
+          "bullets": [
+            "AI có thể sai → luôn cần con người review lại",
+            "Quản lý API key → không commit key lên repo",
+            "Chi phí token → theo dõi bằng Session Report"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gioi-thieu-plugin-demo",
+      "title": "Giới thiệu 4 plugin demo",
+      "duration": "4 phút",
+      "slides": [
+        {
+          "id": "gtpd-1",
+          "layout": "table",
+          "title": "4 plugin demo",
+          "table": {
+            "headers": ["Plugin demo", "Cơ chế bên trong", "Lấp giới hạn nào"],
+            "rows": [
+              ["Frontend Design", "Skill", "Biết làm nhưng chưa có phương pháp chuẩn"],
+              ["Playwright / DevTools", "MCP server", "Chỉ suy luận, không quan sát / hành động"],
+              ["Code Review & Commit", "Hook + Skill", "Chỉ làm khi được gọi"],
+              ["Session Report", "Sub-agent + tổng hợp", "Khó tổng hợp \"đã làm gì\""]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-flow",
+      "title": "Demo — một flow xuyên suốt",
+      "duration": "10 phút",
+      "slides": [
+        {
+          "id": "demo-1",
+          "layout": "statement",
+          "title": "Kịch bản demo",
+          "body": [
+            "Xây dựng tính năng User Management Dashboard từ đầu đến cuối."
+          ]
+        },
+        {
+          "id": "demo-2",
+          "layout": "table",
+          "title": "Flow demo — 4 bước",
+          "table": {
+            "headers": ["Bước", "Plugin", "Câu lệnh", "Kết quả thấy ngay"],
+            "rows": [
+              ["1. Dựng UI", "Frontend Design", "Tạo UI User Dashboard: bảng người dùng, thanh tìm kiếm, biểu đồ, Tailwind", "Giao diện hoàn chỉnh, responsive"],
+              ["2. Kiểm thử", "Playwright / DevTools", "Mở trình duyệt, gõ tìm 'Admin', chụp ảnh kết quả", "Trình duyệt tự bật, screenshot xác minh"],
+              ["3. Review & Commit", "Code Review & Commit", "Kiểm tra các file vừa tạo và tạo commit", "Nhận xét + commit chuẩn"],
+              ["4. Tổng kết", "Session Report", "Xuất báo cáo phiên làm việc", "Dashboard token + sub-agent + việc xong"]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "qa",
+      "title": "Q&A",
+      "duration": "5–10 phút",
+      "slides": [
+        {
+          "id": "qa-1",
+          "layout": "countdown",
+          "title": "Q&A — 30 giây",
+          "body": [
+            "Cảm ơn đã lắng nghe — nếu được thì đừng hỏi gì ạ."
+          ],
+          "countdown": 30
+        }
+      ]
+    }
+  ]
+}
