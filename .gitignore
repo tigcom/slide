@@ -1,0 +1,6 @@
+# Go build artifacts (chỉ binary demo/server/server, không phải thư mục nguồn)
+/server/server
+*.exe
+
+# Env / secrets
+.env
