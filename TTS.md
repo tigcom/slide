@@ -18,14 +18,12 @@ pip install "protobuf>=6.31.1,<8.0.0"   # tránh xung đột protobuf/tensorflow
 
 ## Chuẩn bị giọng (ref audio)
 
-- Cần một đoạn **3–5 giây**, giọng rõ, ít tạp âm. **Không dùng file dài** — clone sẽ sai giọng / méo.
-- Cắt đoạn sạch nhất thành mono 48kHz bằng ffmpeg:
+- Repo đã kèm sẵn `clone_ref_5s.wav` (giọng gốc 5s, mono 48kHz) — dùng luôn để clone lại đúng giọng này.
+- Muốn đổi giọng: cần một đoạn **3–5 giây**, giọng rõ, ít tạp âm. **Không dùng file dài** — clone sẽ sai giọng / méo. Cắt đoạn sạch nhất thành mono 48kHz bằng ffmpeg rồi đè lên `clone_ref_5s.wav`:
 
 ```bash
 ffmpeg -y -i <file_goc.wav> -ss 7.5 -t 5 -ac 1 -ar 48000 clone_ref_5s.wav
 ```
-
-- Đặt đúng tên `clone_ref_5s.wav` ở gốc repo (mono, 48kHz).
 
 ## Chạy
 
@@ -42,4 +40,4 @@ python build_audio.py --generate    # sinh audio/slide_01.wav ... slide_27.wav
 
 - Dùng Python global `C:\Users\...\Programs\Python\Python311\python.exe`; lệnh `python` có thể trỏ vào một venv khác (không có vieneu/pip). Kiểm tra bằng `python -c "import vieneu"`.
 - Model tự tải về cache HuggingFace, không cần tải thủ công.
-- Giọng (`clone_ref*.wav`) và audio output (`audio/`) **không được commit** — đã nằm trong `.gitignore`.
+- `clone_ref_5s.wav` (ref 5s) **được commit** để clone đúng giọng. Không commit: `clone_ref.wav` (gốc dài 18.4s) và `audio/` (output) — đã nằm trong `.gitignore`.

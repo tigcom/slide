@@ -23,11 +23,12 @@ claude-plugin.pptx
 .DS_Store
 Thumbs.db
 
-# ===== Voice clone / TTS (giọng & output KHÔNG commit) =====
+# ===== Voice clone / TTS =====
+# Giọng gốc dài (18.4s, không cần) & audio output (tự sinh lại) KHÔNG commit
 clone_ref.wav
-clone_ref_5s.wav
 test_clone_output.wav
 audio/
+# clone_ref_5s.wav (ref 5s) ĐƯỢC commit — bắt buộc để clone lại đúng giọng
 
 # ===== Junk session =====
 browser-state-*.json
