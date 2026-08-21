@@ -1,6 +1,24 @@
-# Go build artifacts (chỉ binary demo/server/server, không phải thư mục nguồn)
-/server/server
-*.exe
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Env / secrets
-.env
+# ===== Node.js (frontend) =====
+node_modules/
+dist/
+
+# ===== Repo riêng (push độc lập sang tigcom/present-project.git) =====
+demo/
+
+# ===== File xuất sinh ra từ deck (tự tạo lại khi cần) =====
+claude-plugin.pdf
+claude-plugin.pptx
+
+# ===== State công cụ / session =====
+.firecrawl/
+.frontend-slides/
+.claude/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db

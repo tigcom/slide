@@ -1,0 +1,2043 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude + Plugin</title>
+
+<!-- Fonts: Source Serif 4 (display) + DM Sans (body) + IBM Plex Mono (chrome) — all support Vietnamese -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   THEME TOKENS — merged: Signal layout + Swiss palette + Claude effects
+   - Bố cục editorial (B): serif headline, mono chrome, hairline rules
+   - Màu (A): trắng / đen / đỏ #f73500
+   - Hiệu ứng (C): con trỏ nhấp nháy, glow, staggered reveal
+   ============================================================ */
+:root {
+    /* Surface */
+    --stage-bg: #0a0a0a;
+    --paper: #ffffff;
+    --ink: #0a0a0a;
+    --ink-soft: #33312e;
+    --muted: #6b6b6b;
+    --faint: #9a9a9a;
+
+    /* Lines & grid */
+    --line: #e6e3dc;
+    --grid: #efede8;
+
+    /* Accent — single red (from Style A) */
+    --red: #f73500;
+    --red-deep: #c62a00;
+    --red-soft: rgba(247, 53, 0, 0.10);
+    --red-glow: rgba(247, 53, 0, 0.22);
+
+    /* Typography */
+    --font-serif: 'Source Serif 4', serif;
+    --font-sans: 'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ============================================================
+   FIXED 16:9 STAGE — MANDATORY BASE (viewport-base.css)
+   ============================================================ */
+html, body {
+    width: 100%; height: 100%; margin: 0; overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+.deck-viewport {
+    position: fixed; inset: 0; overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+.deck-stage {
+    position: absolute; left: 0; top: 0;
+    width: 1920px; height: 1080px; overflow: hidden;
+    transform-origin: 0 0; background: var(--paper);
+}
+.slide {
+    position: absolute; inset: 0;
+    width: 1920px; height: 1080px; overflow: hidden;
+    display: block; visibility: hidden; opacity: 0; pointer-events: none;
+    background: var(--paper);
+}
+.slide.active, .slide.visible {
+    visibility: visible; opacity: 1; pointer-events: auto; z-index: 1;
+}
+img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+.deck-controls {
+    position: fixed; left: 50%; bottom: 22px;
+    transform: translateX(-50%); z-index: 1000;
+}
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide { position: relative; display: block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; width: 1920px; height: 1080px; break-after: page; page-break-after: always; }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+}
+
+/* ============================================================
+   COMMON CHROME (editorial top bar + hairline + footer)
+   ============================================================ */
+.slide-inner {
+    position: absolute; inset: 0;
+    padding: 76px 96px 64px;
+    display: flex; flex-direction: column;
+}
+.chrome {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 22px; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted);
+}
+.chrome .kicker b { color: var(--red); font-weight: 700; }
+.chrome .folio { color: var(--ink); }
+.chrome .folio em { color: var(--red); font-style: normal; }
+em2 { color: var(--faint); font-style: normal; }
+.rule {
+    height: 1px; background: var(--ink); opacity: 0.85;
+    margin-top: 20px;
+}
+.rule.soft { background: var(--line); opacity: 1; }
+
+.slide-footer {
+    margin-top: auto;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 20px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--faint);
+    padding-top: 20px;
+}
+.slide-footer b { color: var(--red); font-weight: 500; }
+
+/* Faint structural grid (from Style A) */
+.grid-overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 100px 100px;
+    opacity: 0.55;
+}
+
+/* ============================================================
+   ENTRANCE ANIMATION (staggered reveal)
+   ============================================================ */
+.reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.55s var(--ease), transform 0.55s var(--ease);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.d1 { transition-delay: 0.10s; }
+.d2 { transition-delay: 0.20s; }
+.d3 { transition-delay: 0.30s; }
+.d4 { transition-delay: 0.40s; }
+.d5 { transition-delay: 0.50s; }
+.d6 { transition-delay: 0.60s; }
+
+/* ============================================================
+   BLINKING CURSOR (from Style C, recolored red)
+   ============================================================ */
+.cursor {
+    display: inline-block;
+    width: 0.55em; height: 1.05em;
+    background: var(--red);
+    vertical-align: -0.12em; margin-left: 0.25em;
+    animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ============================================================
+   COVER SLIDE
+   ============================================================ */
+.cover { background: var(--paper); }
+.cover .glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+        radial-gradient(ellipse 900px 600px at 80% 18%, var(--red-glow) 0%, transparent 60%),
+        radial-gradient(ellipse 700px 500px at 12% 88%, var(--red-soft) 0%, transparent 60%);
+}
+.cover .title-block { margin-top: auto; padding: 36px 0; }
+.cover .display {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 176px;
+    line-height: 1.0;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+}
+.cover .display em { font-style: italic; color: var(--red); }
+.cover .subtitle {
+    margin-top: 40px;
+    font-family: var(--font-sans);
+    font-size: 38px; font-weight: 400;
+    color: var(--muted);
+    max-width: 1250px;
+}
+
+/* ============================================================
+   SECTION DIVIDER SLIDES (dark surface + red glow + cursor)
+   ============================================================ */
+.divider { background: var(--ink); }
+.divider .glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+        radial-gradient(ellipse 800px 520px at 80% 20%, var(--red-glow) 0%, transparent 60%),
+        radial-gradient(ellipse 600px 460px at 15% 85%, rgba(247,53,0,0.12) 0%, transparent 60%);
+}
+.divider .grid-overlay {
+    background-image:
+        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 90px 90px;
+}
+.divider-inner {
+    position: absolute; inset: 0;
+    padding: 120px 120px 96px;
+    display: flex; flex-direction: column;
+    justify-content: center;
+}
+.divider-num {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 180px;
+    line-height: 1;
+    color: var(--red);
+}
+.divider-rule { width: 180px; height: 6px; background: var(--red); margin: 34px 0; }
+.divider-title {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 92px;
+    line-height: 1.06;
+    color: #ffffff;
+    max-width: 1450px;
+}
+.divider-title em { font-style: italic; color: var(--red); }
+.divider-meta {
+    margin-top: 44px;
+    font-family: var(--font-mono);
+    font-size: 28px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted);
+}
+.divider-meta b { color: #ffffff; font-weight: 500; }
+
+/* ============================================================
+   STATEMENT SLIDES (eyebrow label + big serif lines)
+   ============================================================ */
+.eyebrow {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 26px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 40px;
+}
+.statement { margin-top: auto; margin-bottom: auto; max-width: 1680px; }
+.statement .line {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 66px;
+    line-height: 1.18;
+    color: var(--ink);
+}
+.statement .line + .line { margin-top: 28px; }
+.statement .line em { font-style: italic; color: var(--red); }
+
+/* ============================================================
+   BULLETS SLIDES
+   ============================================================ */
+.h-title {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 60px;
+    line-height: 1.08;
+    color: var(--ink);
+    margin-top: 44px;
+    max-width: 1600px;
+}
+.h-title em { font-style: italic; color: var(--red); }
+.bullets {
+    list-style: none;
+    margin-top: 44px;
+    display: flex; flex-direction: column; gap: 30px;
+    max-width: 1660px;
+}
+.bullets li {
+    display: flex; gap: 28px; align-items: flex-start;
+    font-family: var(--font-sans);
+    font-size: 34px; font-weight: 400;
+    line-height: 1.42;
+    color: var(--ink-soft);
+}
+.bullets li::before {
+    content: "";
+    flex: 0 0 14px;
+    width: 14px; height: 14px;
+    margin-top: 16px;
+    background: var(--red);
+}
+.bullets li b { color: var(--ink); font-weight: 700; }
+
+/* ============================================================
+   TABLE SLIDES
+   ============================================================ */
+.table-wrap {
+    margin-top: 40px;
+    width: 100%;
+}
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+}
+table.data thead th {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 23px;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    padding: 16px 22px 18px;
+    border-bottom: 3px solid var(--red);
+}
+table.data tbody td {
+    font-family: var(--font-sans);
+    font-size: 30px; font-weight: 400;
+    line-height: 1.38;
+    color: var(--ink-soft);
+    padding: 22px 22px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+}
+table.data tbody tr:last-child td { border-bottom: none; }
+table.data td b { color: var(--ink); font-weight: 700; }
+table.data td.idx {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--red);
+    white-space: nowrap;
+}
+
+/* ============================================================
+   FLOW SLIDE — hai luồng xử lý một task khó
+   ============================================================ */
+.flow {
+    margin-top: 32px;
+    display: flex;
+    gap: 60px;
+    width: 100%;
+    max-width: 1728px;
+}
+.flow-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.flow-head {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+.flow-tag {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+    padding: 9px 22px;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.flow-col.plugin .flow-tag { color: var(--red); border-color: var(--red); }
+.flow-kind {
+    font-family: var(--font-mono);
+    font-size: 19px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.flow-body { display: flex; flex-direction: column; }
+.flow-node {
+    position: relative;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--ink);
+    border-radius: 10px;
+    padding: 13px 20px;
+    background: #fff;
+}
+.flow-col.plugin .flow-node { border-left-color: var(--red); }
+.flow-node .n-label {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 25px;
+    line-height: 1.25;
+    color: var(--ink);
+}
+.flow-node .n-sub {
+    font-family: var(--font-sans);
+    font-size: 18px;
+    line-height: 1.3;
+    color: var(--muted);
+    margin-top: 2px;
+}
+.flow-node .formula {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+}
+.flow-node.gap { border-left-color: var(--red); background: var(--red-soft); }
+.flow-node.gap .n-label { color: var(--red-deep); }
+.flow-node.dead { border-left-color: var(--faint); opacity: 0.55; }
+.flow-node.done { border-left-color: var(--red); }
+.flow-arrow {
+    align-self: center;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--red);
+    padding: 7px 0;
+}
+
+/* Vòng lặp (có plugin) — khung đứt nét + nhãn ↺ lặp lại */
+.loop {
+    position: relative;
+    border: 2px dashed var(--red);
+    border-radius: 14px;
+    background: var(--red-soft);
+    padding: 18px 16px 16px;
+    display: flex;
+    flex-direction: column;
+}
+.loop-badge {
+    position: absolute;
+    top: -16px;
+    left: 20px;
+    background: #fff;
+    padding: 3px 14px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--red);
+    border-radius: 6px;
+}
+.loop-badge .glyph { font-size: 20px; }
+.loop .flow-node { border-left-color: var(--red); }
+.loop .flow-arrow { padding: 6px 0; }
+
+/* Dòng chốt cuối slide */
+.flow-takeaway {
+    margin-top: auto;
+    padding-top: 22px;
+    border-top: 1px solid var(--ink);
+    font-family: var(--font-serif);
+    font-size: 33px;
+    line-height: 1.3;
+    color: var(--ink);
+}
+.flow-takeaway em { font-style: italic; color: var(--red); }
+
+/* ============================================================
+   SLIDE FIGURE — robot illustrations (transparent PNG, Freepik)
+   ============================================================ */
+.slide-figure {
+    position: absolute;
+    right: 96px;
+    top: 190px;
+    bottom: 128px;
+    width: 540px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2;
+}
+.slide-figure::before {
+    content: '';
+    position: absolute;
+    width: 430px;
+    height: 430px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--red-soft) 0%, rgba(247, 53, 0, 0.03) 55%, transparent 72%);
+}
+.slide-figure img {
+    position: relative;
+    z-index: 1;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 26px 34px rgba(10, 10, 10, 0.12));
+}
+
+/* Content yields the right margin to the figure */
+.slide.has-figure .statement,
+.slide.has-figure .bullets,
+.slide.has-figure .h-title,
+.slide.has-figure .table-wrap {
+    max-width: 1140px;
+}
+
+/* Cover — larger hero robot, top-right (title stays bottom-left) */
+.cover .slide-figure {
+    right: 48px;
+    top: 108px;
+    bottom: 380px;
+    width: 700px;
+}
+.cover .slide-figure::before {
+    width: 580px;
+    height: 580px;
+}
+
+/* ============================================================
+   QR CHECK-IN SLIDE (flip clock 35s → flip to QR)
+   ============================================================ */
+.qr-checkin {
+    margin: auto 0;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+}
+.qr-title {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: 104px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    display: grid;
+}
+.qr-title em { font-style: italic; color: var(--red); }
+.qr-swap {
+    grid-area: 1 / 1;
+    transition: opacity 0.55s var(--ease), transform 0.55s var(--ease);
+}
+.qr-swap.qr-b {
+    opacity: 0;
+    transform: translateY(18px);
+}
+.qr-title.is-qr .qr-swap.qr-a { opacity: 0; transform: translateY(-18px); }
+.qr-title.is-qr .qr-swap.qr-b { opacity: 1; transform: translateY(0); }
+.qr-message {
+    font-family: var(--font-serif);
+    font-size: 40px;
+    line-height: 1.4;
+    color: var(--ink);
+    margin-top: 30px;
+    max-width: 1320px;
+}
+.qr-message em { font-style: italic; color: var(--red); }
+.qr-row {
+    display: flex;
+    align-items: center;
+    gap: 48px;
+    margin-top: 30px;
+}
+.qr-row .qr-message {
+    margin-top: 0;
+    text-align: left;
+    max-width: 780px;
+}
+
+/* 3D flip stage — front: flip clock, back: square QR */
+.flip-stage {
+    margin-top: 58px;
+    width: 520px;
+    height: 330px;
+    perspective: 1400px;
+}
+.flip-stage-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 1.05s var(--ease);
+}
+.flip-stage.is-flipped .flip-stage-inner { transform: rotateY(180deg); }
+.flip-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.flip-back { transform: rotateY(180deg); }
+.load-unit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+}
+.qr-img {
+    width: 300px; height: 300px;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 26px 70px rgba(0,0,0,0.16);
+}
+.qr-caption {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 16px;
+}
+
+/* Split-flap clock */
+.flip-clock {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+}
+.clock-digit {
+    position: relative;
+    width: 150px;
+    height: 210px;
+    perspective: 800px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 170px;
+    line-height: 210px;
+    color: #fff;
+}
+.clock-digit .half {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    overflow: hidden;
+    background: #101010;
+}
+.clock-digit .half span,
+.clock-digit .flap-top span,
+.clock-digit .flap-bottom span {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 210px;
+    line-height: 210px;
+    text-align: center;
+}
+.clock-digit .static-top { top: 0; border-radius: 16px 16px 0 0; z-index: 1; }
+.clock-digit .static-top span { top: 0; }
+.clock-digit .static-bottom { bottom: 0; border-radius: 0 0 16px 16px; z-index: 1; }
+.clock-digit .static-bottom span { bottom: 0; }
+.clock-digit .half::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.10);
+    z-index: 5;
+}
+.clock-digit .static-top::after { bottom: 0; }
+.clock-digit .static-bottom::after { top: 0; }
+
+.clock-digit .flap-top,
+.clock-digit .flap-bottom {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    overflow: hidden;
+    background: #101010;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    will-change: transform;
+}
+.clock-digit .flap-top {
+    top: 0;
+    border-radius: 16px 16px 0 0;
+    transform-origin: 50% 100%;
+    z-index: 3;
+    transform: rotateX(0deg);
+}
+.clock-digit .flap-bottom {
+    bottom: 0;
+    border-radius: 0 0 16px 16px;
+    transform-origin: 50% 0%;
+    z-index: 4;
+    transform: rotateX(90deg);
+}
+.clock-digit .flap-top span { top: 0; }
+.clock-digit .flap-bottom span { bottom: 0; }
+
+.clock-digit.flipping .flap-top { animation: qr-flip-top 0.32s var(--ease) forwards; }
+.clock-digit.flipping .flap-bottom { animation: qr-flip-bottom 0.32s var(--ease) 0.32s forwards; }
+@keyframes qr-flip-top {
+    from { transform: rotateX(0deg); }
+    to   { transform: rotateX(-90deg); }
+}
+@keyframes qr-flip-bottom {
+    from { transform: rotateX(90deg); }
+    to   { transform: rotateX(0deg); }
+}
+
+.clock-unit-label {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    letter-spacing: 0.30em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 20px;
+}
+
+/* Hamster loading spinner (Uiverse.io by Nawsome — recolored to site red) */
+.wheel-and-hamster {
+    --dur: 1s;
+    position: relative;
+    width: 12em;
+    height: 12em;
+    font-size: 14px;
+}
+.wheel,
+.hamster,
+.hamster div,
+.spoke { position: absolute; }
+.wheel,
+.spoke {
+    border-radius: 50%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+.wheel {
+    background: radial-gradient(100% 100% at center, hsla(0,0%,60%,0) 47.8%, hsl(0,0%,60%) 48%);
+    z-index: 2;
+}
+.hamster {
+    animation: hamster var(--dur) ease-in-out infinite;
+    top: 50%;
+    left: calc(50% - 3.5em);
+    width: 7em;
+    height: 3.75em;
+    transform: rotate(4deg) translate(-0.8em, 1.85em);
+    transform-origin: 50% 0;
+    z-index: 1;
+}
+.hamster__head {
+    animation: hamsterHead var(--dur) ease-in-out infinite;
+    background: hsl(12, 100%, 50%);
+    border-radius: 70% 30% 0 100% / 40% 25% 25% 60%;
+    box-shadow: 0 -0.25em 0 hsl(12, 100%, 72%) inset,
+        0.75em -1.55em 0 hsl(12, 100%, 88%) inset;
+    top: 0;
+    left: -2em;
+    width: 2.75em;
+    height: 2.5em;
+    transform-origin: 100% 50%;
+}
+.hamster__ear {
+    animation: hamsterEar var(--dur) ease-in-out infinite;
+    background: hsl(12, 100%, 78%);
+    border-radius: 50%;
+    box-shadow: -0.25em 0 hsl(12, 100%, 50%) inset;
+    top: -0.25em;
+    right: -0.25em;
+    width: 0.75em;
+    height: 0.75em;
+    transform-origin: 50% 75%;
+}
+.hamster__eye {
+    animation: hamsterEye var(--dur) linear infinite;
+    background-color: hsl(0, 0%, 0%);
+    border-radius: 50%;
+    top: 0.375em;
+    left: 1.25em;
+    width: 0.5em;
+    height: 0.5em;
+}
+.hamster__nose {
+    background: hsl(12, 100%, 40%);
+    border-radius: 35% 65% 85% 15% / 70% 50% 50% 30%;
+    top: 0.75em;
+    left: 0;
+    width: 0.2em;
+    height: 0.25em;
+}
+.hamster__body {
+    animation: hamsterBody var(--dur) ease-in-out infinite;
+    background: hsl(12, 100%, 88%);
+    border-radius: 50% 30% 50% 30% / 15% 60% 40% 40%;
+    box-shadow: 0.1em 0.75em 0 hsl(12, 100%, 50%) inset,
+        0.15em -0.5em 0 hsl(12, 100%, 72%) inset;
+    top: 0.25em;
+    left: 2em;
+    width: 4.5em;
+    height: 3em;
+    transform-origin: 17% 50%;
+    transform-style: preserve-3d;
+}
+.hamster__limb--fr,
+.hamster__limb--fl {
+    clip-path: polygon(0 0,100% 0,70% 80%,60% 100%,0% 100%,40% 80%);
+    top: 2em;
+    left: 0.5em;
+    width: 1em;
+    height: 1.5em;
+    transform-origin: 50% 0;
+}
+.hamster__limb--fr {
+    animation: hamsterFRLimb var(--dur) linear infinite;
+    background: linear-gradient(hsl(12, 100%, 72%) 80%, hsl(12, 100%, 40%) 80%);
+    transform: rotate(15deg) translateZ(-1px);
+}
+.hamster__limb--fl {
+    animation: hamsterFLLimb var(--dur) linear infinite;
+    background: linear-gradient(hsl(12, 100%, 88%) 80%, hsl(12, 100%, 78%) 80%);
+    transform: rotate(15deg);
+}
+.hamster__limb--br,
+.hamster__limb--bl {
+    border-radius: 0.75em 0.75em 0 0;
+    clip-path: polygon(0 0,100% 0,100% 30%,70% 90%,70% 100%,30% 100%,40% 90%,0% 30%);
+    top: 1em;
+    left: 2.8em;
+    width: 1.5em;
+    height: 2.5em;
+    transform-origin: 50% 30%;
+}
+.hamster__limb--br {
+    animation: hamsterBRLimb var(--dur) linear infinite;
+    background: linear-gradient(hsl(12, 100%, 72%) 90%, hsl(12, 100%, 40%) 90%);
+    transform: rotate(-25deg) translateZ(-1px);
+}
+.hamster__limb--bl {
+    animation: hamsterBLLimb var(--dur) linear infinite;
+    background: linear-gradient(hsl(12, 100%, 88%) 90%, hsl(12, 100%, 78%) 90%);
+    transform: rotate(-25deg);
+}
+.hamster__tail {
+    animation: hamsterTail var(--dur) linear infinite;
+    background: hsl(12, 100%, 78%);
+    border-radius: 0.25em 50% 50% 0.25em;
+    box-shadow: 0 -0.2em 0 hsl(12, 100%, 40%) inset;
+    top: 1.5em;
+    right: -0.5em;
+    width: 1em;
+    height: 0.5em;
+    transform: rotate(30deg) translateZ(-1px);
+    transform-origin: 0.25em 0.25em;
+}
+.spoke {
+    animation: spoke var(--dur) linear infinite;
+    background: radial-gradient(100% 100% at center, hsl(0,0%,60%) 4.8%, hsla(0,0%,60%,0) 5%),
+        linear-gradient(hsla(0,0%,55%,0) 46.9%, hsl(0,0%,65%) 47% 52.9%, hsla(0,0%,65%,0) 53%) 50% 50% / 99% 99% no-repeat;
+}
+
+/* Hamster animations */
+@keyframes hamster {
+    from, to { transform: rotate(4deg) translate(-0.8em, 1.85em); }
+    50% { transform: rotate(0) translate(-0.8em, 1.85em); }
+}
+@keyframes hamsterHead {
+    from, 25%, 50%, 75%, to { transform: rotate(0); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(8deg); }
+}
+@keyframes hamsterEye {
+    from, 90%, to { transform: scaleY(1); }
+    95% { transform: scaleY(0); }
+}
+@keyframes hamsterEar {
+    from, 25%, 50%, 75%, to { transform: rotate(0); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(12deg); }
+}
+@keyframes hamsterBody {
+    from, 25%, 50%, 75%, to { transform: rotate(0); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(-2deg); }
+}
+@keyframes hamsterFRLimb {
+    from, 25%, 50%, 75%, to { transform: rotate(50deg) translateZ(-1px); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(-30deg) translateZ(-1px); }
+}
+@keyframes hamsterFLLimb {
+    from, 25%, 50%, 75%, to { transform: rotate(-30deg); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(50deg); }
+}
+@keyframes hamsterBRLimb {
+    from, 25%, 50%, 75%, to { transform: rotate(-60deg) translateZ(-1px); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(20deg) translateZ(-1px); }
+}
+@keyframes hamsterBLLimb {
+    from, 25%, 50%, 75%, to { transform: rotate(20deg); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(-60deg); }
+}
+@keyframes hamsterTail {
+    from, 25%, 50%, 75%, to { transform: rotate(30deg) translateZ(-1px); }
+    12.5%, 37.5%, 62.5%, 87.5% { transform: rotate(10deg) translateZ(-1px); }
+}
+@keyframes spoke {
+    from { transform: rotate(0); }
+    to { transform: rotate(-1turn); }
+}
+
+/* ============================================================
+   INLINE EDIT TOGGLE
+   ============================================================ */
+.edit-hotzone {
+    position: fixed; top: 0; left: 0;
+    width: 80px; height: 80px; z-index: 10000; cursor: pointer;
+}
+.edit-toggle {
+    position: fixed; top: 18px; left: 18px;
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 1px solid var(--line); background: #fff;
+    font-size: 24px; line-height: 1; cursor: pointer;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 10001;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+body.editing .slide { outline: 2px dashed var(--red); outline-offset: -4px; }
+body.editing [contenteditable="true"]:hover { background: rgba(247,53,0,0.06); }
+
+/* ============================================================
+   DECK CONTROLS (outside the slide stage)
+   ============================================================ */
+.deck-controls {
+    display: flex; align-items: center; gap: 14px;
+    font-family: var(--font-mono); font-size: 15px; color: #777;
+}
+.deck-controls button {
+    font-family: var(--font-mono); font-size: 15px;
+    border: 1px solid #333; background: rgba(20,20,20,0.7); color: #ccc;
+    border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.deck-controls button:hover { background: rgba(40,40,40,0.9); color: #fff; }
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+    <main class="deck-stage" id="deckStage">
+
+        <!-- ================= COVER (slide 01) ================= -->
+        <section class="slide cover active visible">
+            <div class="glow"></div>
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4" style="margin-top: 100px;">
+                <img src="undraw-svg/cli-coding-agent.svg" alt="CLI coding agent — minh họa Claude Code">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker"><b>Thuyết trình kỹ thuật nội bộ</b></span>
+                    <span class="folio"><em>08</em> · 2026</span>
+                </header>
+                <div class="rule reveal d2"></div>
+
+                <div class="title-block">
+                    <h1 class="display reveal d3">Claude + <br> <em>Plugin</em></h1>
+                    <p class="subtitle reveal d4">từ công cụ tự vận hành đến nền tảng mở rộng</p>
+                </div>
+
+                <div class="rule reveal d3"></div>
+                <div class="slide-footer reveal d4">
+                    <span>Khối công nghệ</span>
+                    <span><b>70</b> phút<span class="cursor"></span></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= DIVIDER 01 — MỞ BÀI ================= -->
+        <section class="slide divider">
+            <div class="glow"></div>
+            <div class="grid-overlay"></div>
+            <div class="divider-inner">
+                <div class="divider-num reveal d1">01</div>
+                <div class="divider-rule reveal d2"></div>
+                <h2 class="divider-title reveal d3">Mở bài — <em>Luận điểm</em></h2>
+                <div class="divider-meta reveal d4"><b>Tại sao cần plugin</b><span class="cursor"></span></div>
+            </div>
+        </section>
+
+        <!-- mo-bai-1 — Luận điểm cốt lõi -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/ai-agent.svg" alt="AI agent tự vận hành — luận điểm cốt lõi">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>01</b> · Mở bài</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <div class="statement">
+                    <p class="eyebrow reveal d2">Luận điểm cốt lõi</p>
+                    <p class="line reveal d3">Claude Code vốn đã là công cụ <em>tự vận hành</em> — không đơn thuần là 1 tác nhân AI chỉ có khả năng nhưng chatbot.</p>
+                    <p class="line reveal d4">Plugin là cách mở rộng nó, lấp các <em>khoảng trống</em> mà bản nguyên bản chưa có.</p>
+                </div>
+                <div class="slide-footer reveal d4">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- mo-bai-2 — Điều cần nhớ -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/plug-in.svg" alt="Plugin cắm vào — mở rộng Claude">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>01</b> · Mở bài</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <div class="statement">
+                    <p class="eyebrow reveal d2">Điều cần nhớ</p>
+                    <p class="line reveal d3">Đừng chỉ dùng Claude như một chatbot — hãy mở rộng nó bằng <em>plugin</em> để nó tự vận hành trọn gói.</p>
+                </div>
+                <div class="slide-footer reveal d4">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- mo-bai-3 — Mạch của buổi nói -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/process.svg" alt="Quy trình — mạch 3 bước của buổi nói">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>01</b> · Mở bài</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Mạch của buổi nói</h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span><b>Khái niệm &amp; phân loại</b> — hạn chế của bản nguyên bản, rồi "plugin" là gì</span></li>
+                    <li class="reveal d4"><span><b>Cơ chế vận hành</b> — 4 cơ chế bên trong plugin</span></li>
+                    <li class="reveal d5"><span><b>Minh họa thực tế</b> — 4 plugin demo, mỗi plugin lấp một giới hạn</span></li>
+                </ul>
+                <div class="slide-footer reveal d5">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= DIVIDER 02 — KHÁI NIỆM & PHÂN LOẠI ================= -->
+        <section class="slide divider">
+            <div class="glow"></div>
+            <div class="grid-overlay"></div>
+            <div class="divider-inner">
+                <div class="divider-num reveal d1">02</div>
+                <div class="divider-rule reveal d2"></div>
+                <h2 class="divider-title reveal d3">Khái niệm &amp; <em>phân loại</em></h2>
+                <div class="divider-meta reveal d4"><b>20 phút</b><span class="cursor"></span></div>
+            </div>
+        </section>
+
+        <!-- kpl-1 — Claude Code: không phải chatbot -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/coding.svg" alt="Lập trình — Claude tự đọc, sửa, chạy lệnh">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Claude Code: <em>Giới hạn</em></h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span>Claude Code nguyên bản (chưa cài plugin) đã tự: <b>đọc/sửa file, chạy lệnh, tìm code, thao tác git</b>.</span></li>
+                    <li class="reveal d4"><span>Không phải chatbot copy-paste — nó đã là <b>công cụ tự vận hành</b>.</span></li>
+                    <li class="reveal d5"><span>Nhưng tự nó vẫn còn <b>4 giới hạn</b> — chưa bàn đến cách lấp.</span></li>
+                </ul>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- kpl-1b — Hai luồng xử lý một task khó -->
+        <section class="slide">
+            <div class="grid-overlay"></div>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Một task khó — <em>hai luồng xử lý</em></h2>
+
+                <div class="flow">
+                    <!-- KHÔNG CÓ PLUGIN -->
+                    <div class="flow-col">
+                        <div class="flow-head reveal d3">
+                            <span class="flow-tag">Không có plugin</span>
+                            <span class="flow-kind">Vòng hở · một lần</span>
+                        </div>
+                        <div class="flow-body">
+                            <div class="flow-node reveal d3">
+                                <div class="n-label">Nhận task khó</div>
+                                <div class="n-sub">phân tích yêu cầu</div>
+                            </div>
+                            <div class="flow-arrow reveal d3">↓</div>
+                            <div class="flow-node reveal d4">
+                                <div class="n-label">Suy luận trong context hiện có</div>
+                                <div class="n-sub"><span class="formula">Input → Reason → Output</span></div>
+                            </div>
+                            <div class="flow-arrow reveal d4">↓</div>
+                            <div class="flow-node gap reveal d5">
+                                <div class="n-label">Cần dữ liệu / hành động ngoài context</div>
+                                <div class="n-sub">không có interface để lấy hay thực hiện</div>
+                            </div>
+                            <div class="flow-arrow reveal d5">↓</div>
+                            <div class="flow-node dead reveal d6">
+                                <div class="n-label">Dừng · đoán hoặc hỏi lại người dùng</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CÓ PLUGIN -->
+                    <div class="flow-col plugin">
+                        <div class="flow-head reveal d3">
+                            <span class="flow-tag">Có plugin</span>
+                            <span class="flow-kind">Vòng kín · lặp đến khi xong</span>
+                        </div>
+                        <div class="flow-body">
+                            <div class="flow-node reveal d3">
+                                <div class="n-label">Nhận task khó</div>
+                            </div>
+                            <div class="flow-arrow reveal d3">↓</div>
+                            <div class="loop reveal d4">
+                                <span class="loop-badge"><span class="glyph">↺</span> lặp lại</span>
+                                <div class="flow-node">
+                                    <div class="n-label">Suy luận → chọn tool → gọi tool</div>
+                                </div>
+                                <div class="flow-arrow">↓</div>
+                                <div class="flow-node">
+                                    <div class="n-label">Hệ thống ngoài thực thi</div>
+                                </div>
+                                <div class="flow-arrow">↓</div>
+                                <div class="flow-node">
+                                    <div class="n-label">Kết quả → quan sát mới</div>
+                                </div>
+                            </div>
+                            <div class="flow-arrow reveal d5">↓</div>
+                            <div class="flow-node done reveal d6">
+                                <div class="n-label">Hoàn thành <span style="color:var(--red)">✓</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-takeaway reveal d6">
+                    Khác biệt không nằm ở <em>“nghĩ nhiều hơn”</em> — mà ở việc có thêm <em>thông tin · hành động · phản hồi</em>.
+                </div>
+
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- kpl-2 — 4 giới hạn của Claude nguyên bản -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/buggy-code.svg" alt="Code lỗi — các giới hạn của bản nguyên bản">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">4 giới hạn của Claude nguyên bản</h2>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                            <tr><th>#</th><th>Giới hạn</th><th>Nghĩa là</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr class="reveal d3"><td class="idx">1</td><td><b>Biết làm, nhưng chưa có phương pháp chuẩn</b></td><td>Viết được (ví dụ frontend) nhưng không theo quy trình chuyên biệt nhất quán</td></tr>
+                            <tr class="reveal d4"><td class="idx">2</td><td><b>Chỉ suy luận, không quan sát / hành động thực tế</b></td><td>Không thực sự nhìn và thao tác hệ thống bên ngoài (trình duyệt, database, API)</td></tr>
+                            <tr class="reveal d5"><td class="idx">3</td><td><b>Chỉ làm khi được gọi</b></td><td>Mỗi bước review / test / commit phải do con người chủ động yêu cầu</td></tr>
+                            <tr class="reveal d6"><td class="idx">4</td><td><b>Khó tổng hợp "đã làm gì"</b></td><td>Việc lớn qua nhiều đầu việc — khó biết đã làm gì, đổi file nào, còn gì chưa xong</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- kpl-3 — Kết luận -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/building-blocks.svg" alt="Khối xếp hình — còn trống bốn chỗ">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <div class="statement">
+                    <p class="eyebrow reveal d2">Kết luận</p>
+                    <p class="line reveal d3">Claude nguyên bản mạnh ở <em>suy nghĩ và viết code</em>; còn trống ở 4 chỗ: phương pháp chuẩn, quan sát thực tế, tự kích hoạt, tổng hợp kết quả.</p>
+                </div>
+                <div class="slide-footer reveal d4">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- kpl-4 — Plugin là gì -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/connected.svg" alt="Kết nối các thành phần — plugin là gì">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Plugin là gì</h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span>Để lấp các khoảng trống trên, Claude được <b>"mở rộng"</b> — ta gọi chung là <b>plugin</b>.</span></li>
+                    <li class="reveal d4"><span>"Plugin" hiểu theo nghĩa rộng: <b>cơ chế mở rộng khả năng làm việc</b> của Claude — bên trong có thể là một thành phần đơn lẻ, hoặc nhiều thành phần kết hợp.</span></li>
+                    <li class="reveal d5"><span>Mỗi plugin nhắm một kiểu khoảng trống: <b>phương pháp, hành động, tự kích hoạt, tổng hợp</b>.</span></li>
+                </ul>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- kpl-5 — Kết luận -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/puzzle-solved.svg" alt="Hoàn thiện ghép hình — plugin lấp khoảng trống">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <div class="statement">
+                    <p class="eyebrow reveal d2">Kết luận</p>
+                    <p class="line reveal d3">Plugin mở rộng Claude theo hai kiểu: lấp khoảng trống <em>"chưa làm được"</em>, và chuẩn hóa chỗ <em>"làm được nhưng chưa nhất quán"</em>.</p>
+                </div>
+                <div class="slide-footer reveal d4">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- kpl-6 — Hệ sinh thái plugin — 3 loại -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/team.svg" alt="Hệ sinh thái — 3 loại plugin">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Hệ sinh thái plugin — 3 loại</h2>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                            <tr><th>Loại</th><th>Là gì</th><th>Ví dụ</th><th>Dùng khi nào</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr class="reveal d3"><td><b>Chính thức</b></td><td>Anthropic phát triển, tích hợp sẵn trong Claude Code</td><td>Extension Claude Code trên VS Code</td><td>Công việc hằng ngày</td></tr>
+                            <tr class="reveal d4"><td><b>Mã nguồn mở</b></td><td>Cộng đồng viết, kết nối công cụ bên ngoài</td><td>Playwright, Cline, Roo Code, Continue</td><td>Cần công cụ đặc thù</td></tr>
+                            <tr class="reveal d5"><td><b>Tự build (nội bộ)</b></td><td>Đội ngũ tự đóng gói quy trình riêng</td><td>Skill /review-pr, hook chạy test</td><td>Chuẩn hóa quy trình team</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- kpl-7 — Điểm nhấn với ban quản lý -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/setup-wizard.svg" alt="Thiết lập dễ dàng — chi phí áp dụng thấp">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>02</b> · Khái niệm &amp; phân loại</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <div class="statement">
+                    <p class="eyebrow reveal d2">Điểm nhấn với ban quản lý</p>
+                    <p class="line reveal d3">Hệ sinh thái có sẵn, không tự xây từ đầu — <em>chi phí áp dụng thấp hơn nhiều người nghĩ</em>.</p>
+                </div>
+                <div class="slide-footer reveal d4">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= DIVIDER 03 — CƠ CHẾ HOẠT ĐỘNG ================= -->
+        <section class="slide divider">
+            <div class="glow"></div>
+            <div class="grid-overlay"></div>
+            <div class="divider-inner">
+                <div class="divider-num reveal d1">03</div>
+                <div class="divider-rule reveal d2"></div>
+                <h2 class="divider-title reveal d3">Cơ chế <em>hoạt động</em></h2>
+                <div class="divider-meta reveal d4"><b>20 phút</b><span class="cursor"></span></div>
+            </div>
+        </section>
+
+        <!-- cchd-1 — Skills -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/guidelines.svg" alt="Hướng dẫn quy trình — Skills làm theo phương pháp chuẩn">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>03</b> · Cơ chế hoạt động</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Skills — <em>làm thế nào?</em></h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span>Trả lời <b>"làm việc này theo cách nào"</b>: đóng gói một phương pháp/quy trình để Claude thực hiện nhất quán.</span></li>
+                    <li class="reveal d4"><span><b>Ví dụ:</b> skill thiết kế giao diện quy định trình tự — mục đích → cấu trúc → bố cục → màu → chữ → component → responsive.</span></li>
+                    <li class="reveal d5"><span>Biến <b>"biết làm"</b> thành <b>"làm theo phương pháp chuẩn"</b>.</span></li>
+                </ul>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- cchd-2 — MCP server -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/mcp-server.svg" alt="MCP server — kết nối công cụ bên ngoài">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>03</b> · Cơ chế hoạt động</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">MCP server — <em>có thể làm gì?</em></h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span>Trả lời <b>"Claude có thể thao tác gì với công cụ ngoài"</b>: chuẩn mở (<b>Model Context Protocol</b>) kết nối database, trình duyệt, API, filesystem.</span></li>
+                    <li class="reveal d4"><span><b>Ví dụ:</b> MCP server điều khiển trình duyệt thật — mở trang, click, nhập liệu, chụp ảnh.</span></li>
+                    <li class="reveal d5"><span>Từ <b>"suy luận, dự đoán"</b> sang <b>"quan sát, hành động thực tế"</b>.</span></li>
+                </ul>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- cchd-3 — Hooks -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/hooked.svg" alt="Móc kích hoạt — Hooks tự chạy theo sự kiện">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>03</b> · Cơ chế hoạt động</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Hooks — <em>khi nào tự động làm?</em></h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span>Trả lời <b>"khi nào tự chạy"</b>: lệnh tự động kích hoạt khi một sự kiện xảy ra (trước/sau hành động).</span></li>
+                    <li class="reveal d4"><span><b>Ví dụ:</b> khi chuẩn bị commit, hook tự chạy quy trình review + test.</span></li>
+                    <li class="reveal d5"><span>Biến từng bước thủ công thành <b>quy trình tự động</b>.</span></li>
+                </ul>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- cchd-4 — Sub-agent -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/teamwork.svg" alt="Làm việc nhóm — Sub-agent chia việc song song">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>03</b> · Cơ chế hoạt động</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Sub-agent — <em>ai làm phần nào?</em></h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span>Trả lời <b>"ai làm phần nào"</b>: chia việc lớn cho các agent con chạy <b>song song</b>, mỗi agent làm một phần rồi gom kết quả về.</span></li>
+                    <li class="reveal d4"><span><b>Ví dụ:</b> code-review chạy 5 reviewer song song — soi bug, check quy chuẩn, đọc lịch sử git — rồi chấm điểm từng nhận xét.</span></li>
+                    <li class="reveal d5"><span>Giải quyết <b>việc lớn cần chia nhỏ</b>; tổng hợp cả phiên là việc của <b>Session Report</b>.</span></li>
+                </ul>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- cchd-5 — Giới hạn & rủi ro (chốt lại phần cơ chế) -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/online-security.svg" alt="Bảo mật — giới hạn và rủi ro">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>03</b> · Cơ chế hoạt động</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Giới hạn &amp; rủi ro</h2>
+                <ul class="bullets">
+                    <li class="reveal d3"><span>AI có thể sai → <b>luôn cần con người review lại</b></span></li>
+                    <li class="reveal d4"><span>Quản lý API key → <b>không commit key lên repo</b></span></li>
+                    <li class="reveal d5"><span>Chi phí token → <b>theo dõi bằng Session Report</b></span></li>
+                </ul>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= DIVIDER 04 — GIỚI THIỆU 4 PLUGIN ================= -->
+        <section class="slide divider">
+            <div class="glow"></div>
+            <div class="grid-overlay"></div>
+            <div class="divider-inner">
+                <div class="divider-num reveal d1">04</div>
+                <div class="divider-rule reveal d2"></div>
+                <h2 class="divider-title reveal d3">Giới thiệu <em>4 plugin demo</em></h2>
+                <div class="divider-meta reveal d4"><b>4 phút</b><span class="cursor"></span></div>
+            </div>
+        </section>
+
+        <!-- gtpd-1 — 4 plugin demo -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/insert-block.svg" alt="Ghép khối — 4 plugin lấp 4 giới hạn">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>04</b> · Giới thiệu 4 plugin</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">4 plugin demo</h2>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                            <tr><th>Plugin demo</th><th>Cơ chế bên trong</th><th>Lấp giới hạn nào</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr class="reveal d3"><td><b>Frontend Design</b></td><td>Skill</td><td>Biết làm nhưng chưa có phương pháp chuẩn</td></tr>
+                            <tr class="reveal d4"><td><b>Playwright / DevTools</b></td><td>MCP server</td><td>Chỉ suy luận, không quan sát / hành động</td></tr>
+                            <tr class="reveal d5"><td><b>Code Review &amp; Commit</b></td><td>Hook + Command + Sub-agent</td><td>Chỉ làm khi được gọi</td></tr>
+                            <tr class="reveal d6"><td><b>Session Report</b></td><td>Command + Skill</td><td>Khó tổng hợp "đã làm gì"</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= DIVIDER 05 — DEMO ================= -->
+        <section class="slide divider">
+            <div class="glow"></div>
+            <div class="grid-overlay"></div>
+            <div class="divider-inner">
+                <div class="divider-num reveal d1">05</div>
+                <div class="divider-rule reveal d2"></div>
+                <h2 class="divider-title reveal d3">Demo — <em>một flow xuyên suốt</em></h2>
+                <div class="divider-meta reveal d4"><b>10 phút</b><span class="cursor"></span></div>
+            </div>
+        </section>
+
+        <!-- demo-1 — Kịch bản demo -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/dashboard.svg" alt="Dashboard quản lý người dùng — kịch bản demo">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>05</b> · Demo</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <div class="statement">
+                    <p class="eyebrow reveal d2">Kịch bản demo</p>
+                    <p class="line reveal d3">Xây dựng tính năng <em>User Management Dashboard</em> từ đầu đến cuối.</p>
+                </div>
+                <div class="slide-footer reveal d4">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- demo-2 — Flow demo — 4 bước -->
+        <section class="slide has-figure">
+            <div class="grid-overlay"></div>
+            <figure class="slide-figure reveal d4">
+                <img src="undraw-svg/connection.svg" alt="Kết nối các bước — flow demo xuyên suốt">
+            </figure>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>05</b> · Demo</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <h2 class="h-title reveal d2">Flow demo — 4 bước</h2>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                            <tr><th>Bước</th><th>Plugin</th><th>Câu lệnh</th><th>Kết quả thấy ngay</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr class="reveal d3"><td class="idx">1. Dựng UI</td><td><b>Frontend Design</b></td><td>Tạo UI User Dashboard: bảng người dùng, thanh tìm kiếm, biểu đồ, Tailwind</td><td>Giao diện hoàn chỉnh, responsive</td></tr>
+                            <tr class="reveal d4"><td class="idx">2. Kiểm thử</td><td><b>Playwright / DevTools</b></td><td>Mở trình duyệt, gõ tìm 'Admin', chụp ảnh kết quả</td><td>Trình duyệt tự bật, screenshot xác minh</td></tr>
+                            <tr class="reveal d5"><td class="idx">3. Review &amp; Commit</td><td><b>Code Review &amp; Commit</b></td><td>Kiểm tra các file vừa tạo và tạo commit</td><td>Nhận xét + commit chuẩn</td></tr>
+                            <tr class="reveal d6"><td class="idx">4. Tổng kết</td><td><b>Session Report</b></td><td>Xuất báo cáo phiên làm việc</td><td>Dashboard token + sub-agent + việc xong</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= DIVIDER 06 — Q&A ================= -->
+        <section class="slide divider">
+            <div class="glow"></div>
+            <div class="grid-overlay"></div>
+            <div class="divider-inner">
+                <div class="divider-num reveal d1">06</div>
+                <div class="divider-rule reveal d2"></div>
+                <h2 class="divider-title reveal d3"><em>Q&amp;A</em></h2>
+                <div class="divider-meta reveal d4"><b>5–10 phút</b><span class="cursor"></span></div>
+            </div>
+        </section>
+
+        <!-- qa-1 — QR điểm danh (flip clock 35s → flip to QR) -->
+        <section class="slide" id="qaCountdownSlide">
+            <div class="grid-overlay"></div>
+            <div class="slide-inner">
+                <header class="chrome reveal d1">
+                    <span class="kicker">Phần <b>06</b> · Q&amp;A</span>
+                    <span class="folio"></span>
+                </header>
+                <div class="rule reveal d2"></div>
+                <div class="qr-checkin">
+                    <h2 class="qr-title reveal d2" id="qrTitle">
+                        <span class="qr-swap qr-a">QA <em>hỏi đáp</em></span>
+                        <span class="qr-swap qr-b">QR <em>điểm danh</em></span>
+                    </h2>
+                    <div class="qr-row reveal d3">
+                        <div class="load-unit">
+                            <div aria-label="Đang tải" role="img" class="wheel-and-hamster">
+                                <div class="wheel"></div>
+                                <div class="hamster">
+                                    <div class="hamster__body">
+                                        <div class="hamster__head">
+                                            <div class="hamster__ear"></div>
+                                            <div class="hamster__eye"></div>
+                                            <div class="hamster__nose"></div>
+                                        </div>
+                                        <div class="hamster__limb hamster__limb--fr"></div>
+                                        <div class="hamster__limb hamster__limb--fl"></div>
+                                        <div class="hamster__limb hamster__limb--br"></div>
+                                        <div class="hamster__limb hamster__limb--bl"></div>
+                                        <div class="hamster__tail"></div>
+                                    </div>
+                                </div>
+                                <div class="spoke"></div>
+                            </div>
+                        </div>
+                        <p class="qr-message">Cảm ơn mọi người đã theo dõi — <span class="shrink">nếu có câu hỏi nào thì mình cứ <em2>theo dõi</em2> ạ</span>, em cảm ơn.</p>
+                    </div>
+
+                    <div class="flip-stage reveal d3" id="flipStage">
+                        <div class="flip-stage-inner" id="flipStageInner">
+                            <div class="flip-face flip-front">
+                                <div class="flip-clock">
+                                    <div class="clock-digit" id="dTens" data-value="3">
+                                        <div class="half static-top"><span>3</span></div>
+                                        <div class="half static-bottom"><span>3</span></div>
+                                        <div class="flap-top"><span>3</span></div>
+                                        <div class="flap-bottom"><span>3</span></div>
+                                    </div>
+                                    <div class="clock-digit" id="dOnes" data-value="5">
+                                        <div class="half static-top"><span>5</span></div>
+                                        <div class="half static-bottom"><span>5</span></div>
+                                        <div class="flap-top"><span>5</span></div>
+                                        <div class="flap-bottom"><span>5</span></div>
+                                    </div>
+                                </div>
+                                <div class="clock-unit-label">Em yêu Kienlong</div>
+                            </div>
+                            <div class="flip-face flip-back">
+                                <img class="qr-img" src="data:image/png;base64,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" alt="QR điểm danh" />
+                                <div class="qr-caption">forms.office.com · điểm danh</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="slide-footer reveal d6">
+                    <span>Claude + Plugin</span>
+                    <span>2026</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- Edit hotzone + toggle -->
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Chỉnh sửa (E)">✏️</button>
+
+<!-- Deck controls (outside slide stage) -->
+<div class="deck-controls">
+    <button id="prevBtn" title="Phím ←">‹</button>
+    <span id="pageLabel">01 / 27</span>
+    <button id="nextBtn" title="Phím →">›</button>
+</div>
+
+<script>
+/* ============================================================
+   FIXED 16:9 STAGE SCALING
+   ============================================================ */
+(function () {
+    var stage = document.getElementById('deckStage');
+    function fit() {
+        var f = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+        stage.style.transform = 'translate(' + ((window.innerWidth - 1920 * f) / 2) + 'px,' +
+            ((window.innerHeight - 1080 * f) / 2) + 'px) scale(' + f + ')';
+    }
+    window.addEventListener('resize', fit);
+    fit();
+})();
+
+/* ============================================================
+   SLIDE PRESENTATION CONTROLLER
+   ============================================================ */
+(function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var total = slides.length;
+    var current = 0;
+    var pageLabel = document.getElementById('pageLabel');
+
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+    // Auto-number folios (top-right) on each slide
+    slides.forEach(function (s, i) {
+        var f = s.querySelector('.folio');
+        if (f) { f.textContent = pad(i + 1) + ' / ' + pad(total); }
+    });
+
+    function show(index) {
+        current = Math.max(0, Math.min(index, total - 1));
+        slides.forEach(function (s, i) {
+            s.classList.toggle('active', i === current);
+            s.classList.toggle('visible', i === current);
+        });
+        if (pageLabel) { pageLabel.textContent = pad(current + 1) + ' / ' + pad(total); }
+        if (window.__presenter) { window.__presenter.broadcast(current); }
+    }
+
+    function next() { show(current + 1); }
+    function prev() { show(current - 1); }
+
+    // Keyboard
+    document.addEventListener('keydown', function (e) {
+        if (e.target && e.target.getAttribute && e.target.getAttribute('contenteditable') === 'true') return;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
+            e.preventDefault(); next();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+            e.preventDefault(); prev();
+        } else if (e.key === 'Home') { e.preventDefault(); show(0); }
+        else if (e.key === 'End') { e.preventDefault(); show(total - 1); }
+    });
+
+    // Mouse wheel
+    var wheelLock = false;
+    window.addEventListener('wheel', function (e) {
+        if (wheelLock) return;
+        wheelLock = true;
+        setTimeout(function () { wheelLock = false; }, 500);
+        if (e.deltaY > 0) { next(); } else { prev(); }
+    }, { passive: true });
+
+    // Touch swipe
+    var touchX = null, touchY = null;
+    window.addEventListener('touchstart', function (e) {
+        touchX = e.touches[0].clientX; touchY = e.touches[0].clientY;
+    }, { passive: true });
+    window.addEventListener('touchend', function (e) {
+        if (touchX === null) return;
+        var dx = e.changedTouches[0].clientX - touchX;
+        var dy = e.changedTouches[0].clientY - touchY;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+            if (dx < 0) { next(); } else { prev(); }
+        }
+        touchX = touchY = null;
+    }, { passive: true });
+
+    // Control buttons
+    document.getElementById('nextBtn').addEventListener('click', next);
+    document.getElementById('prevBtn').addEventListener('click', prev);
+
+    // Expose cho presenter-view
+    window.__goto = show;
+    window.__getCurrent = function () { return current; };
+
+    show(0);
+})();
+
+/* ============================================================
+   QR CHECK-IN (flip clock 35s → flip to QR)
+   ============================================================ */
+(function () {
+    var slide = document.getElementById('qaCountdownSlide');
+    var stage = document.getElementById('flipStage');
+    if (!slide || !stage) return;
+
+    var TOTAL = 35;
+    var remaining = TOTAL;
+    var timer = null;
+
+    var tensEl = document.getElementById('dTens');
+    var onesEl = document.getElementById('dOnes');
+    var title = document.getElementById('qrTitle');
+
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+    function setDigit(el, val) {
+        var cur = el.getAttribute('data-value');
+        if (cur === val) return;
+        el.setAttribute('data-value', val);
+
+        var from = (cur === null) ? val : cur;
+        var topSpan = el.querySelector('.static-top span');
+        var botSpan = el.querySelector('.static-bottom span');
+        var flapTop = el.querySelector('.flap-top');
+        var flapBot = el.querySelector('.flap-bottom');
+
+        flapTop.querySelector('span').textContent = from; // old top folds down
+        flapBot.querySelector('span').textContent = val;  // new bottom unfolds
+        topSpan.textContent = val;                        // new top revealed behind
+
+        el.classList.remove('flipping');
+        void el.offsetWidth; // restart animation
+        el.classList.add('flipping');
+
+        clearTimeout(el._t);
+        el._t = setTimeout(function () {
+            botSpan.textContent = val;
+            flapTop.querySelector('span').textContent = val;
+            flapBot.querySelector('span').textContent = val;
+            el.classList.remove('flipping');
+        }, 700);
+    }
+
+    function render() {
+        var s = pad(remaining);
+        setDigit(tensEl, s.charAt(0));
+        setDigit(onesEl, s.charAt(1));
+    }
+
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+    function start() {
+        stop();
+        remaining = TOTAL;
+        stage.classList.remove('is-flipped');
+        title.classList.remove('is-qr');
+
+        var init = pad(TOTAL);
+        [tensEl, onesEl].forEach(function (el, i) {
+            var v = init.charAt(i);
+            el.setAttribute('data-value', v);
+            el.querySelector('.static-top span').textContent = v;
+            el.querySelector('.static-bottom span').textContent = v;
+            el.querySelector('.flap-top span').textContent = v;
+            el.querySelector('.flap-bottom span').textContent = v;
+            el.classList.remove('flipping');
+        });
+
+        timer = setInterval(function () {
+            remaining -= 1;
+            if (remaining < 0) { remaining = 0; }
+            render();
+            if (remaining === 0) {
+                stop();
+                setTimeout(function () {
+                    stage.classList.add('is-flipped');
+                    title.classList.add('is-qr');
+                }, 900);
+            }
+        }, 1000);
+    }
+
+    // Restart when the slide becomes active, stop when it leaves.
+    var observer = new MutationObserver(function () {
+        if (slide.classList.contains('active')) { start(); } else { stop(); }
+    });
+    observer.observe(slide, { attributes: true, attributeFilter: ['class'] });
+
+    if (slide.classList.contains('active')) { start(); }
+})();
+
+/* ============================================================
+   SHRINKING MESSAGE (per-word font-size taper)
+   ============================================================ */
+(function () {
+    var roots = document.querySelectorAll('.shrink');
+    var STEP = 3; // 1px smaller per word
+
+    function wrap(root) {
+        var base = parseFloat(window.getComputedStyle(root).fontSize) || 40;
+        var count = 0;
+        function walk(node) {
+            Array.prototype.slice.call(node.childNodes).forEach(function (child) {
+                if (child.nodeType === 3) {
+                    var frag = document.createDocumentFragment();
+                    (child.nodeValue.match(/\S+|\s+/g) || []).forEach(function (tok) {
+                        if (!/\S/.test(tok)) {
+                            // whitespace: keep as plain text, don't shrink / don't count
+                            frag.appendChild(document.createTextNode(tok));
+                            return;
+                        }
+                        var s = document.createElement('span');
+                        s.textContent = tok;
+                        s.style.fontSize = Math.max(1, base - count * STEP) + 'px';
+                        count += 1;
+                        frag.appendChild(s);
+                    });
+                    node.replaceChild(frag, child);
+                } else if (child.nodeType === 1) {
+                    walk(child);
+                }
+            });
+        }
+        walk(root);
+    }
+
+    Array.prototype.forEach.call(roots, wrap);
+})();
+
+/* ============================================================
+   INLINE EDITING (E key / hover hotzone / Ctrl+S to save)
+   ============================================================ */
+(function () {
+    var editor = {
+        isActive: false,
+        toggle: function () {
+            this.isActive = !this.isActive;
+            document.body.classList.toggle('editing', this.isActive);
+            document.getElementById('editToggle').classList.toggle('active', this.isActive);
+            var slides = document.querySelectorAll('.slide');
+            slides.forEach(function (s) {
+                if (editor.isActive) {
+                    s.setAttribute('contenteditable', 'true');
+                } else {
+                    s.removeAttribute('contenteditable');
+                }
+            });
+        }
+    };
+
+    var toggle = document.getElementById('editToggle');
+    var hotzone = document.getElementById('editHotzone');
+    var hideTimeout = null;
+
+    function showBtn() { clearTimeout(hideTimeout); toggle.classList.add('show'); }
+    function hideBtnSoon() {
+        hideTimeout = setTimeout(function () {
+            if (!editor.isActive) { toggle.classList.remove('show'); }
+        }, 400);
+    }
+
+    toggle.addEventListener('click', function () { editor.toggle(); });
+    hotzone.addEventListener('mouseenter', showBtn);
+    hotzone.addEventListener('mouseleave', hideBtnSoon);
+    hotzone.addEventListener('click', function () { editor.toggle(); });
+    toggle.addEventListener('mouseenter', showBtn);
+    toggle.addEventListener('mouseleave', hideBtnSoon);
+
+    document.addEventListener('keydown', function (e) {
+        var editing = e.target && e.target.getAttribute && e.target.getAttribute('contenteditable') === 'true';
+        if ((e.key === 'e' || e.key === 'E') && !editing) { editor.toggle(); }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            if (editor.isActive) {
+                var stage = document.getElementById('deckStage');
+                localStorage.setItem('claude-plugin-deck', stage.innerHTML);
+                console.log('Đã lưu vào localStorage.');
+            }
+        }
+    });
+
+    // Restore saved edits on load
+    var saved = localStorage.getItem('claude-plugin-deck');
+    if (saved) {
+        document.getElementById('deckStage').innerHTML = saved;
+    }
+})();
+</script>
+<script>
+/* ============================================================
+   PRESENTER VIEW — ghi chú người nói đồng bộ theo slide
+   - Phím P: mở cửa sổ ghi chú (presenter.html) lên màn laptop
+   - Ghi chú tự đổi theo slide đang chiếu; không hiện gì lên máy chiếu
+   - Nếu notes_server.py đang chạy: nạp ghi chú mới nhất từ kich-ban-noi.md
+   ============================================================ */
+var SPEAKER_NOTES = [{"section": "Mở đầu", "title": "Claude + Plugin", "note": "Dạ Chào mọi người. Hôm nay em xin trình bày về việc kết hơp sử dụng Plugin cho Claude — từ 1 công cụ tự vận hành đến việc khai phá các tiềm năng của claude."}, {"section": "Mở bài", "title": "Mở bài — Luận điểm", "note": "Phần 1 — Mở bài (5 phút).\nTrong phần đầu tiên thì em sẽ chia sẻ về công dụng của plugin cũng như là lý do nó cần thiết với claude"}, {"section": "Mở bài", "title": "Luận điểm cốt lõi", "note": "Đầu tiên để giới thiệu về claude thì nó là 1 công cụ hỗ trợ lập trình quá mạnh mẽ và nổi tiếng , nó hoàn toàn có thể thay thế được các thao tác lập trình thủ công. Và plugin là cách mở rộng các giới hạn của nó , giúp  lấp đầy những cái khoảng trống mà bản nguyên bản chưa có.**"}, {"section": "Mở bài", "title": "Điều cần nhớ", "note": "Vẫn còn nhiều người chỉ sử dụng claude đơn thuẩn để thay thế các thao tác lập trình thủ công, và gặp nhiều khó khăn bởi các giới hạn, những điểm chưa tối ưu, mà vẫn chưa khai phá được hết những lợi ích mà claude có thể mang lại"}, {"section": "Mở bài", "title": "Mạch của buổi nói", "note": "Buổi đào tạo hôm nay em sẽ nói về các phần cụ thể như khái niệm và phân loại , về cơ chế vận hành của plugin, kết thúc sẽ là 1 demo nhỏ"}, {"section": "Khái niệm & phân loại", "title": "Khái niệm & phân loại", "note": "Bắt đầu Phần 2 với Khái niệm & các loại plugin \n\n trong này sẽ Đi qua các chủ đề như 4 giới hạn của bản nguyên bản → \"plugin\" là gì → 3 loại plugin chính"}, {"section": "Khái niệm & phân loại", "title": "Claude Code: Giới hạn", "note": "Trước hết phải gỡ một hiểu lầm phổ biến đó là nhiều người vẫn hình dung Claude có thể làm được tất cả mọi thứ, thì \nmột hệ thống chỉ có khả năng “tính toán trên thông tin nó được cung cấp”.Nó có thể mô tả hành động, nhưng không thực hiện hành động đó. và Không có khả năng tác động ra thế giới bên ngoài\nVề lý thuyết, LLM chỉ có thể suy luận dựa trên:\n\ninput + context + kiến thức đã học + khả năng suy luận của model.\nNếu một thông tin không nằm trong những thứ đó, model không có cách trực tiếp để biết.\nnếu cung cấp cho nó khả năng “biết cách lấy dữ liệu” thì nó có thể \n“có khả năng lấy dữ liệu”."}, {"section": "Khái niệm & phân loại", "title": "Hai luồng xử lý một task khó", "note": "cùng xem llm xử lý 1 task khó dưới một góc rất đơn giản:\n\nKhi nhận một task khó, model sẽ phân tích yêu cầu và suy luận dựa trên context mà nó đang có. Về mặt khái niệm, chúng ta có thể hình dung là:\n\nInput → Reason → Output.\n\nVấn đề xuất hiện khi trong quá trình suy luận, model phát hiện rằng để đi tiếp nó cần một thông tin mới, hoặc cần thực hiện một hành động nằm ngoài context và capability interface hiện tại.\n\nLúc này, nó không có cách trực tiếp để lấy thêm thông tin hoặc thực hiện hành động đó. Vì vậy, hệ thống có thể phải dừng lại, yêu cầu người dùng cung cấp thêm thông tin, hoặc đưa ra một câu trả lời dựa trên những gì hiện có.\n\nĐiểm quan trọng ở đây không phải là model tự nhiên trở nên thông minh hơn.\n\nThay vào đó, model có thêm một interface để tương tác với hệ thống bên ngoài.\n\nNó có thể suy luận, xác định cần capability nào, chọn tool và gọi tool. Hệ thống bên ngoài thực thi hành động đó và trả kết quả về.\n\nKết quả này trở thành một observation mới, tức là context của model được cập nhật bằng thông tin mà trước đó nó chưa có.\n\nSau đó model lại suy luận tiếp.\n\nNếu chưa đủ thì tiếp tục gọi tool. Nếu đã đủ thì hoàn thành task.\n\nVì vậy luồng xử lý trở thành một vòng lặp:\n\nSuy luận → chọn tool → thực thi → nhận kết quả → quan sát trạng thái mới → suy luận tiếp."}, {"section": "Khái niệm & phân loại", "title": "4 giới hạn của Claude nguyên bản", "note": "Thứ nhất, **biết làm nhưng chưa có phương pháp chuẩn**: Claude viết được frontend, nhưng không theo một quy trình chuyên biệt nhất quán — nên chất lượng phụ thuộc cách mình đặt vấn đề, sự rõ ràng khi cung cấp yêu cầu, độ hoàn thiện không cao.\n\nThứ hai, **chỉ suy luận, không quan sát hay hành động thực tế**: nó đọc code, viết code, dự đoán lỗi — nhưng không thực sự nhìn và thao tác hệ thống bên ngoài, như trình duyệt đang chạy, database, API., nó có thể viết test  nhưng không biết data chuẩn để test là gì nếu ko chủ động cung cấp, test xong cũng ko nắm data nền để verify cho đúng ngữ cảnh\n\nThứ ba, **chỉ làm khi được gọi**: mỗi bước review, test, commit đều phải do mình chủ động yêu cầu — không có cơ chế \"khi sự kiện xảy ra thì tự chạy\".\n\nThứ tư, **khó tổng hợp \"đã làm gì\"**: việc lớn qua nhiều đầu việc, sau đó khó biết nó đã làm gì, đổi file nào, còn gì chưa xong."}, {"section": "Khái niệm & phân loại", "title": "Kết luận", "note": "Tóm lại: Claude nguyên bản mạnh ở suy nghĩ và viết code; còn giới hạn ở nhiều chỗ — chưa có phương pháp chuẩn, khả năng quan sát thực tế, tự nắm bắt linh hoạt, và tổng hợp kết quả. Tất nhiên là sẽ có : có giới hạn là \"chưa làm được\" và  có giới hạn là \"làm được nhưng chưa nhất quán\"."}, {"section": "Khái niệm & phân loại", "title": "Plugin là gì", "note": "Vậy giải pháp ở đây chính là plugin? Bằng cách mở rộng Claude \n\n\"Plugin\" ở đây hiểu theo nghĩa rộng: là cơ chế mở rộng khả năng làm việc của Claude. Bên trong một plugin có thể là một thành phần đơn lẻ, hoặc nhiều thành phần kết hợp.\n\nMỗi plugin nhắm một kiểu cải tiến khác nhau về phương pháp, hành động, tự kích hoạt, hoặc tổng hợp."}, {"section": "Khái niệm & phân loại", "title": "Kết luận", "note": "Tóm lại: plugin không biến Claude từ \"không làm được\" thành \"làm được\" nhưng nó mở rộng khả năng xử lý vấn đề của Claude, theo hai hướng đó là có thể bù đắp cho những gì \"chưa làm  được\", và chuẩn hóa chỗ \"làm được nhưng chưa nhất quán\"."}, {"section": "Khái niệm & phân loại", "title": "Hệ sinh thái plugin — 3 loại", "note": "Vậy hệ sinh thái plugin gồm những loại nào? Có 3 loại, chia theo nguồn gốc và mục đích.\n\nLoại thứ nhất là **chính thức** — do Anthropic phát triển, tích hợp sẵn trong Claude Code. Ví dụ Extension Claude Code trên VS Code.\n\nLoại thứ hai là **mã nguồn mở** — do cộng đồng viết, kết nối công cụ bên ngoài. Ví dụ Playwright, Cline, Roo Code, Continue.\n\nLoại thứ ba là **tự build nội bộ** — đội ngũ tự đóng gói quy trình riêng. Ví dụ skill `/review-pr` hay hook chạy test."}, {"section": "Khái niệm & phân loại", "title": "Điểm nhấn với ban quản lý", "note": "plugin vốn là các tiện ích được dựng sẵn và đúc kết từ kinh nghiệm của các nhà phát triển khác giúp chi phí áp dụng thấp hơn nhiều người nghĩ."}, {"section": "Cơ chế hoạt động", "title": "Cơ chế hoạt động", "note": "Phần 3 — Cơ chế hoạt động (20 phút).\n\nĐã rõ plugin là gì và lấp khoảng trống gì. Giờ đi sâu một tầng: bên trong, plugin mở rộng Claude bằng những cơ chế nào? Có 4 cơ chế.\n\nLưu ý để tránh hiểu nhầm: **cả 4 cơ chế này đều là tính năng có sẵn của Claude Code** — chỉ cần cấu hình, không bắt buộc plugin. Plugin chỉ là cách đóng gói và chia sẻ."}, {"section": "Cơ chế hoạt động", "title": "Skills — làm thế nào?", "note": "Cơ chế thứ nhất là **Skills** — trả lời câu hỏi \"làm việc này theo cách nào\". Nó đóng gói một phương pháp, một quy trình, để Claude thực hiện nhất quán.\n\nVí dụ: một skill thiết kế giao diện quy định trình tự rõ — xác định mục đích, cấu trúc thông tin, bố cục, màu, chữ, component, rồi kiểm tra responsive.\n\nÝ nghĩa: biến \"biết làm\" thành \"làm theo phương pháp chuẩn\"."}, {"section": "Cơ chế hoạt động", "title": "MCP server — có thể làm gì?", "note": "Cơ chế thứ hai là **MCP server** — trả lời \"Claude có thể thao tác gì với công cụ ngoài\". Đây là chuẩn mở, Model Context Protocol, để kết nối database, trình duyệt, API, filesystem.\n\nVí dụ: một MCP server điều khiển trình duyệt thật — mở trang, click, nhập liệu, chụp ảnh.\n\nÝ nghĩa: đưa Claude từ \"suy luận, dự đoán\" sang \"quan sát, hành động thực tế\"."}, {"section": "Cơ chế hoạt động", "title": "Hooks — khi nào tự động làm?", "note": "Cơ chế thứ ba là **Hooks** — trả lời \"khi nào tự chạy\". Đây là lệnh tự động kích hoạt khi một sự kiện xảy ra, trước hoặc sau một hành động.\n\nVí dụ: khi chuẩn bị commit, hook tự chạy quy trình review + test.\n\nÝ nghĩa: biến từng bước thủ công thành quy trình tự động."}, {"section": "Cơ chế hoạt động", "title": "Sub-agent — ai làm phần nào?", "note": "Cơ chế thứ tư là **Sub-agent** — trả lời \"ai làm phần nào\". Nó chia việc lớn cho các agent con, chạy song song, mỗi agent làm một phần rồi gom kết quả về.\n\nVí dụ: code-review chạy 5 reviewer song song — soi bug, check quy chuẩn, đọc lịch sử git — rồi chấm điểm từng nhận xét.\n\nÝ nghĩa: giải quyết việc lớn cần chia nhỏ; tổng hợp cả phiên là việc của Session Report."}, {"section": "Cơ chế hoạt động", "title": "Giới hạn & rủi ro", "note": "Một task có thể khó vì nhiều nguyên nhân khác nhau.\n\nVí dụ về mặt lý thuyết, độ khó có thể đến từ:\n\nThiếu thông tin\nThông tin quá lớn\nThông tin cần được lấy từ nguồn bên ngoài\nCần tính toán hoặc xử lý bằng hệ thống chuyên biệt\nCần thực hiện hành động bên ngoài model\nCần nhiều bước phụ thuộc lẫn nhau\nCần kiểm tra kết quả sau khi hành động\nCần trạng thái thay đổi theo thời gian\n\nDo đó, không nên nói:\n\n“LLM thất bại vì nó không đủ thông minh.”\n\nChính xác hơn:\n\n“Task có thể yêu cầu những capability nằm ngoài interface mà LLM hiện đang được cung cấp.”\nTrước khi sang các plugin cụ thể, cần nói rõ giới hạn và rủi ro. Thứ nhất, AI có thể sai, nên luôn cần con người review lại. Thứ hai, cần thật sự cân nhác về mặt chi phí, AI không toàn năng, nó là sự đánh đổi giữa kinh phí và năng xuất , nên tồn tại giới hạn là điều rõ ràng"}, {"section": "Giới thiệu 4 plugin demo", "title": "Giới thiệu 4 plugin demo", "note": "Phần 4 — Giới thiệu 4 plugin demo (4 phút).\n\n4 plugin, mỗi plugin lấp đúng một giới hạn đã nêu ở Phần 2."}, {"section": "Giới thiệu 4 plugin demo", "title": "4 plugin demo", "note": "\"Để giải quyết triệt để 4 giới hạn ở Phần 2, chúng ta áp dụng ngay 4 plugin thực tế trong hệ sinh thái Claude Code. Mỗi plugin là một mảnh ghép lấp đúng một khoảng trống:\n\nFrontend Design — Lấp giới hạn \"Biết làm nhưng thiếu phương pháp\"\nLà một Skill, plugin này ép AI đi theo quy trình thiết kế bài bản trước khi viết code: chọn rõ phong cách (brutalist, luxury, retro...), phối cặp font chữ độc đáo và dựng bố cục phá cách. Nó giúp loại bỏ hoàn toàn kiểu giao diện AI nhạt nhòa, cho ra sản phẩm chuẩn sản xuất và có gu riêng.\n\nChrome DevTools — Lấp giới hạn \"Chỉ suy luận, không quan sát hay hành động\"\nĐóng vai trò một MCP Server với 29 công cụ, plugin này cho phép Claude trực tiếp điều khiển trình duyệt Chrome thực tế. AI không còn 'đoán mò' nữa mà có thể tự click nút, kiểm tra lỗi Console, đo hiệu năng Network và soi vỡ giao diện trên mọi màn hình.\n\nCode Review — Lấp giới hạn \"Chỉ làm việc khi được gọi\"\nKết hợp Hook, Command và Sub-agent, plugin này tự kích hoạt khi chuẩn bị commit. Nó vận hành song song 5 sub-agent chuyên biệt (soi bug, check quy chuẩn, đọc lịch sử Git...) và chấm điểm độ tin cậy. Chỉ những lỗi có độ chính xác trên 80% mới được báo lên, giúp kiểm soát chất lượng tự động mà không gây nhiễu.\n\nSession Report — Lấp giới hạn \"Khó tổng hợp quá trình\"\nKết hợp Command và Skill, plugin này tự động quét dữ liệu phiên làm việc để xuất ra một báo cáo HTML trực quan. Bạn sẽ nắm trọn bức tranh về lượng token tiêu tốn, hiệu suất cache và những prompt đắt đỏ nhất để dễ dàng tối ưu chi phí."}, {"section": "Demo", "title": "Demo — một flow xuyên suốt", "note": "Phần 5 — Demo (10 phút).\n\nphần cuối cùng em sẽ demo việc sử dụng plugin"}, {"section": "Demo", "title": "Kịch bản demo", "note": "Kịch bản demo: xây dựng tính năng User Management Dashboard từ đầu đến cuối, và sử dụng cả 4 plugin."}, {"section": "Demo", "title": "Flow demo — 4 bước", "note": "**Bước 1 — Dựng UI** (Frontend Design): tôi yêu cầu Claude tạo giao diện trang User Dashboard gồm bảng danh sách người dùng, thanh tìm kiếm và biểu đồ thống kê. Kết quả: giao diện hoàn chỉnh, responsive.\n\n*[Thực hiện demo bước 1]*\n\n**Bước 2 — Kiểm thử** (Playwright / DevTools): yêu cầu Claude mở trình duyệt, gõ tìm \"Admin\", chụp ảnh kết quả. Kết quả: trình duyệt tự bật, tự gõ, screenshot xác minh giao diện hoạt động đúng.\n\n*[Thực hiện demo bước 2]*\n\n**Bước 3 — Review & Commit** (Code Review & Commit): yêu cầu Claude kiểm tra các file vừa tạo và tạo commit. Kết quả: nhận xét về mã nguồn và commit message chuẩn.\n\n*[Thực hiện demo bước 3]*\n\n**Bước 4 — Tổng kết** (Session Report): xuất báo cáo phiên làm việc. Kết quả: dashboard thống kê token, danh sách sub-agent và các việc đã xong.\n\n*[Thực hiện demo bước 4]*\n\nLưu ý: đây là một kịch bản liền mạch, không phải 4 demo rời — mỗi bước lấp một giới hạn đã nêu ở Phần 2, để thấy Claude tự thực thi trọn gói."}, {"section": "Q&A", "title": "Q&A", "note": "Phần 6 — Q&A (5–10 phút).\n\nSlide cuối: đồng hồ đếm ngược 35 giây rồi lật sang QR điểm danh. Chuẩn bị bảng dự phòng câu hỏi ở slide tiếp."}, {"section": "Q&A", "title": "Q&A — hỏi đáp + QR điểm danh", "note": "Buổi trình bày đến đây là hết phần nội dung. Trên slide đang chạy đồng hồ đếm ngược **35 giây** — hết giờ sẽ tự lật sang **mã QR điểm danh** (forms.office.com).\n\nLời dẫn: cảm ơn mọi người đã theo dõi; mời mọi người quét mã QR để điểm danh. Phần hỏi đáp gói gọn trong 35 giây — nếu được thì mọi người cứ theo dõi ạ. *[cười, chỉ vào đồng hồ đếm ngược đang chạy trên slide]*\n\n*[Nếu thực sự có câu hỏi, tham khảo bảng dự phòng bên dưới]*\n\n- \"So với GitHub Copilot thì sao?\" → Copilot gợi ý từng dòng (bị động); Claude + plugin tự thực thi cả quy trình (chủ động). Hai thứ bổ trợ nhau.\n- \"Tốn bao nhiêu?\" → Dùng Session Report để đo; mô hình rẻ cho autocomplete, mô hình mạnh cho refactor.\n- \"Có an toàn không?\" → Quản lý API key qua biến môi trường; không commit key; kiểm soát quyền (plan/normal mode).\n- \"AI có đáng tin không?\" → Không tin tuyệt đối — luôn review lại. Plugin giúp AI thực thi, con người duyệt."}];
+var API_BASES = ['', 'http://127.0.0.1:8765'];
+function apiFetch(path, opts) {
+    return new Promise(function (resolve, reject) {
+        var bases = API_BASES.slice();
+        (function tryNext() {
+            if (!bases.length) { reject(new Error('no notes server')); return; }
+            fetch(bases.shift() + path, opts).then(function (r) {
+                if (!r.ok) throw new Error('bad status');
+                resolve(r);
+            }).catch(tryNext);
+        })();
+    });
+}
+
+(function () {
+    var WIN_NAME = 'claude-presenter';
+    var win = null;
+
+    function payload(i) {
+        var n = SPEAKER_NOTES[i] || { section: '', title: '', note: '' };
+        return { index: i, total: SPEAKER_NOTES.length,
+                 section: n.section, title: n.title, note: n.note };
+    }
+
+    function broadcast(i) {
+        if (win && !win.closed) {
+            try { win.postMessage({ type: 'deck:slide', data: payload(i) }, '*'); } catch (e) {}
+        }
+    }
+
+    function open() {
+        if (win && !win.closed) { win.focus(); return; }
+        win = window.open('presenter.html', WIN_NAME, 'width=640,height=940');
+    }
+
+    // Nạp ghi chú mới nhất từ notes_server (nếu đang chạy); ngược lại giữ bản nhúng.
+    function refreshNotes() {
+        apiFetch('/api/notes', { cache: 'no-store' }).then(function (r) {
+            return r.json();
+        }).then(function (data) {
+            if (data && Array.isArray(data.notes) && data.notes.length) {
+                SPEAKER_NOTES = data.notes;
+                broadcast(window.__getCurrent ? window.__getCurrent() : 0);
+            }
+        }).catch(function () { /* server chưa chạy — dùng ghi chú nhúng */ });
+    }
+    window.__refreshNotes = refreshNotes;
+
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (!d || !d.type) return;
+        // Tự khôi phục tham chiếu presenter nếu bị mất (vd: deck bị reload -> `win` về null).
+        if (d.type === 'presenter:hello' || d.type === 'presenter:goto' || d.type === 'presenter:refresh') {
+            if (e.source && e.source !== window) { win = e.source; }
+        }
+        if (d.type === 'presenter:hello') {
+            if (window.__getCurrent) broadcast(window.__getCurrent());
+        } else if (d.type === 'presenter:goto') {
+            if (window.__goto) window.__goto(Number(d.index));
+        } else if (d.type === 'presenter:refresh') {
+            refreshNotes();
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.target && e.target.getAttribute && e.target.getAttribute('contenteditable') === 'true') return;
+        if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            open();
+        }
+    });
+
+    window.__presenter = { open: open, broadcast: broadcast, refreshNotes: refreshNotes };
+
+    refreshNotes();
+})();
+</script>
+</body>
+</html>
