@@ -113,6 +113,10 @@ function apiFetch(path, opts) {
     window.addEventListener('message', function (e) {
         var d = e.data;
         if (!d || !d.type) return;
+        // Tự khôi phục tham chiếu presenter nếu bị mất (vd: deck bị reload -> `win` về null).
+        if (d.type === 'presenter:hello' || d.type === 'presenter:goto' || d.type === 'presenter:refresh') {
+            if (e.source && e.source !== window) { win = e.source; }
+        }
         if (d.type === 'presenter:hello') {
             if (window.__getCurrent) broadcast(window.__getCurrent());
         } else if (d.type === 'presenter:goto') {
@@ -323,14 +327,18 @@ body {
 
     function pad(n) { return (n < 10 ? '0' : '') + n; }
     function apply(d) {
+        var note = d.note || '';
+        var changed = d.index !== current || note !== currentNote;
         current = d.index;
-        currentNote = d.note || '';
+        currentNote = note;
         idxEl.textContent = pad(d.index + 1);
         totalEl.textContent = pad(d.total);
         sectionEl.textContent = d.section || '';
         titleEl.textContent = d.title || '';
-        noteEl.innerHTML = render(d.note);
-        noteEl.scrollTop = 0;
+        if (changed) {
+            noteEl.innerHTML = render(note);
+            noteEl.scrollTop = 0;
+        }
     }
 
     function goto(i) {
@@ -431,8 +439,16 @@ body {
     });
 
     // Bắt tay: xin deck gửi slide hiện tại (kể cả khi mở lại)
+    function hello() {
+        if (window.opener) {
+            window.opener.postMessage({ type: 'presenter:hello' }, '*');
+        }
+    }
     if (window.opener) {
-        window.opener.postMessage({ type: 'presenter:hello' }, '*');
+        hello();
+        // Heartbeat: nếu deck bị reload, biến `win` của deck về null và mất liên kết.
+        // Cứ 2 giây xin lại slide hiện tại để deck tự khôi phục tham chiếu qua e.source.
+        setInterval(hello, 2000);
     } else {
         // Mở trực tiếp presenter.html (không qua deck): tự nạp từ server, bắt đầu ở slide 0
         sectionEl.textContent = 'standalone — nạp ghi chú…';

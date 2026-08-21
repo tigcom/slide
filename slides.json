@@ -64,6 +64,27 @@
           ]
         },
         {
+          "id": "kpl-1b",
+          "layout": "flow",
+          "title": "Một task khó — hai luồng xử lý",
+          "flow": {
+            "without": [
+              "Nhận task khó",
+              "Suy luận trong context hiện có (Input → Reason → Output)",
+              "Cần dữ liệu / hành động ngoài context — không có interface",
+              "Dừng · đoán hoặc hỏi lại người dùng"
+            ],
+            "with": [
+              "Nhận task khó",
+              "Suy luận → chọn tool → gọi tool",
+              "Hệ thống ngoài thực thi",
+              "Kết quả → quan sát mới (lặp lại)",
+              "Hoàn thành ✓"
+            ]
+          },
+          "takeaway": "Khác biệt không nằm ở 'nghĩ nhiều hơn' — mà ở việc có thêm thông tin · hành động · phản hồi."
+        },
+        {
           "id": "kpl-2",
           "layout": "table",
           "title": "4 giới hạn của Claude nguyên bản",
@@ -166,9 +187,9 @@
           "layout": "bullets",
           "title": "Sub-agent — ai làm phần nào?",
           "bullets": [
-            "Trả lời \"ai làm phần nào\" và \"cuối cùng đã làm gì\": chia việc lớn cho các agent con, chạy song song rồi tổng hợp.",
-            "Ví dụ: 1 agent phân tích code, 1 agent kiểm tra frontend, 1 agent chạy test — gom thành báo cáo.",
-            "Giải quyết việc lớn + tổng hợp kết quả cuối phiên."
+            "Trả lời \"ai làm phần nào\": chia việc lớn cho các agent con chạy song song, mỗi agent làm một phần rồi gom kết quả về.",
+            "Ví dụ: code-review chạy 5 reviewer song song — soi bug, check quy chuẩn, đọc lịch sử git — rồi chấm điểm từng nhận xét.",
+            "Giải quyết việc lớn cần chia nhỏ; tổng hợp cả phiên là việc của Session Report."
           ]
         },
         {
@@ -197,8 +218,8 @@
             "rows": [
               ["Frontend Design", "Skill", "Biết làm nhưng chưa có phương pháp chuẩn"],
               ["Playwright / DevTools", "MCP server", "Chỉ suy luận, không quan sát / hành động"],
-              ["Code Review & Commit", "Hook + Skill", "Chỉ làm khi được gọi"],
-              ["Session Report", "Sub-agent + tổng hợp", "Khó tổng hợp \"đã làm gì\""]
+              ["Code Review & Commit", "Hook + Command + Sub-agent", "Chỉ làm khi được gọi"],
+              ["Session Report", "Command + Skill", "Khó tổng hợp \"đã làm gì\""]
             ]
           }
         }

@@ -20,6 +20,7 @@ META = [
     ("Mở bài",                 "Mạch của buổi nói"),
     ("Khái niệm & phân loại",  "Khái niệm & phân loại"),
     ("Khái niệm & phân loại",  "Claude Code: Giới hạn"),
+    ("Khái niệm & phân loại",  "Hai luồng xử lý một task khó"),
     ("Khái niệm & phân loại",  "4 giới hạn của Claude nguyên bản"),
     ("Khái niệm & phân loại",  "Kết luận"),
     ("Khái niệm & phân loại",  "Plugin là gì"),

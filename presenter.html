@@ -24,7 +24,7 @@
 html, body { height: 100%; }
 body {
     background: var(--bg); color: var(--ink);
-    font-family: var(--sans); font-size: 17px; line-height: 1.65;
+    font-family: var(--sans); font-size: 14px; line-height: 1.65;
     display: flex; flex-direction: column;
 }
 .topbar {
@@ -103,11 +103,11 @@ body {
             <div class="status" id="status"></div>
         </div>
         <div class="foot">
-            <button id="prev">← Trước</button>
-            <div class="hint"><b>←</b>/<b>→</b> đổi slide &nbsp;·&nbsp; <b>✏️ Sửa</b> sửa ghi chú vĩnh viễn</div>
-            <button id="next">Sau →</button>
-            <button id="edit" title="Sửa ghi chú slide này (lưu vào kich-ban-noi.md)">✏️ Sửa</button>
-            <button id="save" style="display:none" title="Lưu vĩnh viễn vào kich-ban-noi.md">💾 Lưu</button>
+            <button id="prev">← </button>
+          
+            <button id="next"> →</button>
+            <button id="edit" title="Sửa ghi chú slide này (lưu vào kich-ban-noi.md)">✏️</button>
+            <button id="save" style="display:none" title="Lưu vĩnh viễn vào kich-ban-noi.md">💾</button>
             <button id="cancel" style="display:none">Hủy</button>
         </div>
     </div>
@@ -175,14 +175,18 @@ body {
 
     function pad(n) { return (n < 10 ? '0' : '') + n; }
     function apply(d) {
+        var note = d.note || '';
+        var changed = d.index !== current || note !== currentNote;
         current = d.index;
-        currentNote = d.note || '';
+        currentNote = note;
         idxEl.textContent = pad(d.index + 1);
         totalEl.textContent = pad(d.total);
         sectionEl.textContent = d.section || '';
         titleEl.textContent = d.title || '';
-        noteEl.innerHTML = render(d.note);
-        noteEl.scrollTop = 0;
+        if (changed) {
+            noteEl.innerHTML = render(note);
+            noteEl.scrollTop = 0;
+        }
     }
 
     function goto(i) {
@@ -283,8 +287,16 @@ body {
     });
 
     // Bắt tay: xin deck gửi slide hiện tại (kể cả khi mở lại)
+    function hello() {
+        if (window.opener) {
+            window.opener.postMessage({ type: 'presenter:hello' }, '*');
+        }
+    }
     if (window.opener) {
-        window.opener.postMessage({ type: 'presenter:hello' }, '*');
+        hello();
+        // Heartbeat: nếu deck bị reload, biến `win` của deck về null và mất liên kết.
+        // Cứ 2 giây xin lại slide hiện tại để deck tự khôi phục tham chiếu qua e.source.
+        setInterval(hello, 2000);
     } else {
         // Mở trực tiếp presenter.html (không qua deck): tự nạp từ server, bắt đầu ở slide 0
         sectionEl.textContent = 'standalone — nạp ghi chú…';

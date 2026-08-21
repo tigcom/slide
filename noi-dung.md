@@ -121,9 +121,9 @@ Phân loại theo **nguồn gốc & mục đích**:
 
 #### 3.4. Sub-agent — "ai làm phần nào?" (5')
 
-- **Là gì:** trả lời *"ai làm phần nào"* và *"cuối cùng đã làm gì"* — chia việc lớn cho các agent con, chạy song song rồi tổng hợp.
-- **Ví dụ:** 1 agent phân tích code, 1 agent kiểm tra frontend, 1 agent chạy test — gom thành báo cáo.
-- **Ý nghĩa:** giải quyết việc lớn + tổng hợp kết quả cuối phiên.
+- **Là gì:** trả lời *"ai làm phần nào"* — chia việc lớn cho các agent con chạy song song, mỗi agent làm một phần rồi gom kết quả về.
+- **Ví dụ:** code-review chạy 5 reviewer song song — soi bug, check quy chuẩn, đọc lịch sử git — rồi chấm điểm từng nhận xét.
+- **Ý nghĩa:** giải quyết việc lớn cần chia nhỏ; tổng hợp cả phiên là việc của Session Report.
 
 #### 3.5. Giới hạn & rủi ro (chốt lại phần cơ chế)
 
@@ -145,8 +145,8 @@ Sau khi hiểu 4 cơ chế, nói rõ giới hạn và rủi ro (thể hiện s�
 |---|---|---|
 | Frontend Design | Skill | Biết làm nhưng chưa có phương pháp chuẩn |
 | Playwright / DevTools | MCP server | Chỉ suy luận, không quan sát / hành động |
-| Code Review & Commit | Hook + Skill | Chỉ làm khi được gọi |
-| Session Report | Sub-agent + tổng hợp | Khó tổng hợp "đã làm gì" |
+| Code Review & Commit | Hook + Command + Sub-agent | Chỉ làm khi được gọi |
+| Session Report | Command + Skill | Khó tổng hợp "đã làm gì" |
 
 ---
 
@@ -193,8 +193,8 @@ Sau khi hiểu 4 cơ chế, nói rõ giới hạn và rủi ro (thể hiện s�
   |---|---|---|---|
   | Chưa có phương pháp chuẩn | Pain point (làm được, chưa nhất quán) | Skill | Frontend Design |
   | Không quan sát/hành động | Hard limit (chưa làm được) | MCP | Playwright / DevTools |
-  | Chỉ làm khi được gọi | Tự động hóa | Hook (+ Skill) | Code Review & Commit |
-  | Khó tổng hợp | Tổng hợp phiên | Sub-agent | Session Report |
+  | Chỉ làm khi được gọi | Tự động hóa | Hook + Command + Sub-agent | Code Review & Commit |
+  | Khó tổng hợp | Tổng hợp phiên | Command + Skill | Session Report |
 
 **Kế hoạch dự phòng (backup):**
 - Quay sẵn video demo toàn bộ flow (tốc độ 1.5x) làm phương án B.
