@@ -22,3 +22,13 @@ claude-plugin.pptx
 # ===== OS =====
 .DS_Store
 Thumbs.db
+
+# ===== Voice clone / TTS (giọng & output KHÔNG commit) =====
+clone_ref.wav
+clone_ref_5s.wav
+test_clone_output.wav
+audio/
+
+# ===== Junk session =====
+browser-state-*.json
+CLAUDE.md.backup
